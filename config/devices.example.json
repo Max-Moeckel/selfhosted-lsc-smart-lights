@@ -1,0 +1,16 @@
+{
+  "ceiling": {
+    "id": "DEVICE_ID",
+    "ip": "192.168.x.x",
+    "key": "LOCAL_KEY",
+    "version": "3.3",
+    "note": "LSC Smart Ceiling Light – CCT"
+  },
+  "bulb": {
+    "id": "DEVICE_ID",
+    "ip": "192.168.x.x",
+    "key": "LOCAL_KEY",
+    "version": "3.3",
+    "note": "LSC A65 CCT Bulb"
+  }
+}

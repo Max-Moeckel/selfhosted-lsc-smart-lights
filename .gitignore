@@ -1,0 +1,8 @@
+.venv/
+__pycache__/
+*.pyc
+config/devices.json
+# tinytuya wizard output – may contain keys
+tinytuya.json
+snapshot.json
+devices.json
