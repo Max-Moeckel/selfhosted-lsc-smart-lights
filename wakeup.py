@@ -8,6 +8,7 @@ import time
 from pathlib import Path
 
 import lamp
+import party
 
 WAKEUP_PATH = Path(os.environ.get("LSC_WAKEUP", Path(__file__).parent / "config" / "wakeup.json"))
 
@@ -61,6 +62,14 @@ def run_sunrise(device: str, duration_min: float):
         return
     _running.set()
     try:
+        # Sunrise takes priority: stop party mode (the only concurrently running
+        # mode) and wait for its thread to release the lamp before we ramp, so
+        # the two don't fight over DPS 24 / the colour↔white mode switch.
+        party.stop()
+        for _ in range(20):
+            if not party.is_active():
+                break
+            time.sleep(0.1)
         cfg = lamp.load_config()
         if device not in cfg:
             return
