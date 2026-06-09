@@ -133,6 +133,29 @@ PAGE = """\
       </div>
       </div>`;
     }
+    function skeleton(name) {
+      return `
+      <div class="col-12 col-md-6">
+      <div class="card bg-dark border-secondary h-100">
+        <div class="card-body">
+          <div class="d-flex justify-content-between align-items-center mb-2">
+            <span class="fw-semibold">${name}</span>
+            <span class="badge text-bg-secondary">
+              <span class="spinner-border spinner-border-sm" style="width:.8rem;height:.8rem"></span>
+            </span>
+          </div>
+          <div class="placeholder-glow">
+            <span class="placeholder col-3 mb-2"></span>
+            <span class="placeholder col-12"></span>
+            <span class="placeholder col-12"></span>
+          </div>
+        </div>
+      </div>
+      </div>`;
+    }
+    function renderSkeletons(names) {
+      document.getElementById('lamps').innerHTML = names.map(skeleton).join('');
+    }
     async function refresh() {
       const [data, party] = await Promise.all([api('/api/status'), api('/api/party')]);
       partyActive = party.active;
@@ -217,10 +240,11 @@ PAGE = """\
       refresh();
     }
     (async () => {
-      PROFILES = await api('/api/profiles');
-      const st = await api('/api/status');
-      await loadWakeup(Object.keys(st));
-      refresh();
+      const [profiles, names] = await Promise.all([api('/api/profiles'), api('/api/devices')]);
+      PROFILES = profiles;
+      renderSkeletons(names);          // show lamp cards immediately
+      loadWakeup(names);               // populate the wake-up panel in parallel
+      refresh();                       // fill in live status when it arrives
       setInterval(refresh, 10000);
     })();
   </script>
@@ -244,6 +268,13 @@ def index():
 @app.get("/api/profiles")
 def profiles():
     return jsonify({k: v["label"] for k, v in lamp.PROFILES.items()})
+
+
+@app.get("/api/devices")
+def devices():
+    # names only, straight from config — no LAN round-trip, so the UI can render
+    # the lamp cards immediately instead of waiting on the slow status query
+    return jsonify(list(lamp.load_config().keys()))
 
 
 @app.get("/api/status")
