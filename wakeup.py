@@ -21,6 +21,7 @@ DEFAULT = {
 }
 
 _running = threading.Event()
+_abort = threading.Event()
 # Colour-mode HSV (DPS 24) gives 0–1000 brightness resolution. We pace the ramp
 # so brightness changes by ~1 unit per tick → imperceptible. MIN_INTERVAL keeps
 # short test ramps from flooding the device with LAN calls.
@@ -60,6 +61,7 @@ def run_sunrise(device: str, duration_min: float):
     """Blocking HSV sunrise ramp for the colour ceiling light; run in a thread."""
     if _running.is_set():
         return
+    _abort.clear()
     _running.set()
     try:
         # Sunrise takes priority: stop party mode (the only concurrently running
@@ -127,11 +129,20 @@ def run_sunrise(device: str, duration_min: float):
                     except Exception:
                         pass
                     last_braw = braw
-            if frac >= 1.0:
+            if frac >= 1.0 or _abort.is_set():
                 break
             time.sleep(step)
     finally:
         _running.clear()
+
+
+def cancel():
+    """Abort an in-progress sunrise (e.g. when the user picks a mode)."""
+    _abort.set()
+
+
+def is_active() -> bool:
+    return _running.is_set()
 
 
 def _loop():

@@ -51,6 +51,7 @@ def power(name):
     _, dev = _device(name)
     if dev is None:
         return jsonify({"error": "unknown device"}), 404
+    wakeup.cancel()
     try:
         lamp.set_power(dev, bool(request.json.get("on")))
         return jsonify({"ok": True})
@@ -64,6 +65,7 @@ def bright(name):
     if dev is None:
         return jsonify({"error": "unknown device"}), 404
     val = max(1, min(100, int(request.json.get("value", 50))))
+    wakeup.cancel()
     try:
         lamp.set_bright(dev, val)
         return jsonify({"ok": True})
@@ -77,6 +79,7 @@ def temp(name):
     if dev is None:
         return jsonify({"error": "unknown device"}), 404
     val = max(0, min(100, int(request.json.get("value", 50))))
+    wakeup.cancel()
     try:
         lamp.set_temp(dev, val)
         return jsonify({"ok": True})
@@ -92,6 +95,7 @@ def colour(name):
     hexval = (request.json.get("hex") or "").lstrip("#")
     if len(hexval) != 6:
         return jsonify({"error": "invalid colour"}), 400
+    wakeup.cancel()
     try:
         r, g, b = (int(hexval[i:i + 2], 16) for i in (0, 2, 4))
         lamp.set_colour(dev, r, g, b)
@@ -131,6 +135,7 @@ def party_get():
 def party_set():
     body = request.json or {}
     if body.get("on"):
+        wakeup.cancel()
         device = body.get("device") or wakeup.load().get("device", "ceiling")
         party.start(device, body.get("mode", "smooth"))
     else:
@@ -146,6 +151,7 @@ def profile(name):
     key = request.json.get("key")
     if key not in lamp.PROFILES:
         return jsonify({"error": "unknown profile"}), 400
+    wakeup.cancel()
     try:
         lamp.apply_profile(dev, key)
         return jsonify({"ok": True})
