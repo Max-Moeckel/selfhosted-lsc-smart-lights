@@ -17,33 +17,19 @@ DEFAULT = {
     "duration_min": 30,     # ramp length, 10–60
     "device": "ceiling",
     "days": [0, 1, 2, 3, 4],  # 0=Mon … 6=Sun
-    "end_temp": 50,         # colour temp reached at the end (0=warm … 100=cool)
 }
 
 _running = threading.Event()
-# Brightness raw range is 10–1000 (990 steps). We pace the ramp so each tick
-# nudges brightness by ~1 raw unit → imperceptible. MIN_INTERVAL keeps short
-# test ramps from flooding the device with LAN calls.
-MIN_INTERVAL = 0.5
-BRIGHT_STEPS = 990
-
-# Sunrise colour gradient (dim red → red → orange → amber), positions 0..1.
-SUNRISE_PALETTE = [
-    (0.0,  (30, 0, 0)),
-    (0.35, (140, 25, 0)),
-    (0.65, (220, 80, 12)),
-    (1.0,  (255, 150, 45)),
-]
-COLOUR_PHASE = 0.7  # first 70% of the ramp is the colour gradient, then white
+# Colour-mode HSV (DPS 24) gives 0–1000 brightness resolution. We pace the ramp
+# so brightness changes by ~1 unit per tick → imperceptible. MIN_INTERVAL keeps
+# short test ramps from flooding the device with LAN calls.
+MIN_INTERVAL = 0.3
+BRIGHT_STEPS = 1000
 
 
-def _palette(t: float) -> tuple[int, int, int]:
-    t = max(0.0, min(1.0, t))
-    for (p0, c0), (p1, c1) in zip(SUNRISE_PALETTE, SUNRISE_PALETTE[1:]):
-        if t <= p1:
-            f = (t - p0) / (p1 - p0) if p1 > p0 else 0.0
-            return tuple(round(a + (b - a) * f) for a, b in zip(c0, c1))
-    return SUNRISE_PALETTE[-1][1]
+def _hsv_hex(h: int, s: int, v: int) -> str:
+    """Tuya colour_data_v2 hex: H 0–360, S/V 0–1000."""
+    return "%04x%04x%04x" % (int(h) % 360, max(0, min(1000, int(s))), max(0, min(1000, int(v))))
 
 
 def load() -> dict:
@@ -59,13 +45,12 @@ def load() -> dict:
 def save(cfg: dict) -> dict:
     merged = {**DEFAULT, **load(), **cfg}
     merged["duration_min"] = max(1, min(60, int(merged["duration_min"])))
-    merged["end_temp"] = max(0, min(100, int(merged["end_temp"])))
     WAKEUP_PATH.write_text(json.dumps(merged, indent=2))
     return merged
 
 
-def run_sunrise(device: str, duration_min: int, end_temp: int):
-    """Blocking ramp; run in a thread. Ignores transient device errors."""
+def run_sunrise(device: str, duration_min: float):
+    """Blocking HSV sunrise ramp for the colour ceiling light; run in a thread."""
     if _running.is_set():
         return
     _running.set()
@@ -77,56 +62,28 @@ def run_sunrise(device: str, duration_min: int, end_temp: int):
         total = max(10, round(duration_min * 60))
         try:
             dev.turn_on()
+            dev.set_value(21, "colour")
         except Exception:
             pass
-        # colour gradient only on colour-capable devices (DPS 24); else warm-white ramp
-        try:
-            dps = dev.status().get("dps", {})
-            supports_colour = "24" in dps
-        except Exception:
-            supports_colour = False
-
         step = max(MIN_INTERVAL, total / BRIGHT_STEPS)
-        white_set = False
-        last_braw = last_traw = None
-        last_colour = None
+        last_hex = None
         start = time.time()
         while True:
             frac = min(1.0, (time.time() - start) / total)
-            if supports_colour and frac < COLOUR_PHASE:
-                rgb = _palette(frac / COLOUR_PHASE)
-                if rgb != last_colour:
-                    try:
-                        dev.set_colour(*rgb)
-                    except Exception:
-                        pass
-                    last_colour = rgb
-            else:
-                if not white_set:
-                    try:
-                        dev.set_mode("white")
-                    except Exception:
-                        pass
-                    white_set = True
-                if supports_colour:
-                    local = (frac - COLOUR_PHASE) / (1 - COLOUR_PHASE)
-                    braw = max(10, round((0.7 + 0.3 * local) * 990 + 10))
-                    traw = round(local * end_temp * 10)
-                else:
-                    braw = max(10, round(frac * 990 + 10))
-                    traw = round(frac * end_temp * 10)
-                if traw != last_traw:
-                    try:
-                        dev.set_value(23, traw)
-                    except Exception:
-                        pass
-                    last_traw = traw
-                if braw != last_braw:
-                    try:
-                        dev.set_value(22, braw)
-                    except Exception:
-                        pass
-                    last_braw = braw
+            # smoothstep: eases in at the start and out at the end (no abrupt finish)
+            ease = frac * frac * (3 - 2 * frac)
+            # one continuous HSV curve: deep red → warm orange, desaturating toward
+            # warm white, brightness rising the whole way (single mode, no switch)
+            h = round(35 * frac)              # 0° red → 35° warm orange
+            s = round(1000 - 700 * frac)      # 1000 saturated → 300 pale/warm
+            v = round(10 + 990 * ease)
+            hexval = _hsv_hex(h, s, v)
+            if hexval != last_hex:
+                try:
+                    dev.set_value(24, hexval)
+                except Exception:
+                    pass
+                last_hex = hexval
             if frac >= 1.0:
                 break
             time.sleep(step)
@@ -148,7 +105,7 @@ def _loop():
             last_fired = now.date()
             threading.Thread(
                 target=run_sunrise,
-                args=(cfg["device"], cfg["duration_min"], cfg["end_temp"]),
+                args=(cfg["device"], cfg["duration_min"]),
                 daemon=True,
             ).start()
         time.sleep(20)

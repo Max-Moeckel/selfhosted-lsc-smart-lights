@@ -298,7 +298,7 @@ def wakeup_test():
     # short 30-second preview so you don't wait the full duration
     threading.Thread(
         target=wakeup.run_sunrise,
-        args=(cfg["device"], 0.5, cfg["end_temp"]),
+        args=(cfg["device"], 0.5),
         daemon=True,
     ).start()
     return jsonify({"ok": True})
