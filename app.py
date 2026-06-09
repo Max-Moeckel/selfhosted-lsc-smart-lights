@@ -5,6 +5,7 @@ import threading
 from flask import Flask, jsonify, request, render_template_string
 
 import lamp
+import party
 import wakeup
 
 app = Flask(__name__)
@@ -76,6 +77,12 @@ PAGE = """\
     <div class="row" style="margin-top:.9rem">
       <button onclick="saveWakeup()">Speichern</button>
       <button onclick="testWakeup()">30-Sek-Test</button>
+    </div>
+  </div>
+  <div class="card" id="party">
+    <div class="row">
+      <span class="name">Party-Modus</span>
+      <button id="party-btn" class="power" onclick="toggleParty()">An</button>
     </div>
   </div>
   <div id="lamps"></div>
@@ -188,10 +195,22 @@ PAGE = """\
       await saveWakeup();
       await api('/api/wakeup/test', {method:'POST'});
     }
+    function renderParty(active) {
+      const btn = document.getElementById('party-btn');
+      btn.textContent = active ? 'Aus' : 'An';
+      btn.style.background = active ? '#7d2e6b' : '';
+    }
+    async function toggleParty() {
+      const cur = document.getElementById('party-btn').textContent === 'Aus';
+      const r = await api('/api/party', {method:'POST',
+        headers:{'Content-Type':'application/json'}, body:JSON.stringify({on: !cur})});
+      renderParty(r.active);
+    }
     (async () => {
       PROFILES = await api('/api/profiles');
       const st = await api('/api/status');
       await loadWakeup(Object.keys(st));
+      renderParty((await api('/api/party')).active);
       refresh();
       setInterval(refresh, 10000);
     })();
@@ -302,6 +321,21 @@ def wakeup_test():
         daemon=True,
     ).start()
     return jsonify({"ok": True})
+
+
+@app.get("/api/party")
+def party_get():
+    return jsonify({"active": party.is_active()})
+
+
+@app.post("/api/party")
+def party_set():
+    cfg = wakeup.load()
+    if request.json.get("on"):
+        party.start(cfg.get("device", "ceiling"))
+    else:
+        party.stop()
+    return jsonify({"active": party.is_active()})
 
 
 @app.post("/api/<name>/profile")
