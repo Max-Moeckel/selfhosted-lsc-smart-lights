@@ -105,6 +105,11 @@ def set_colour(dev: tinytuya.BulbDevice, r: int, g: int, b: int):
     dev.set_colour(r, g, b)
 
 
+def _hsv_hex(h: int, s: int, v: int) -> str:
+    """Tuya colour_data_v2 hex: H 0–360, S/V 0–1000."""
+    return "%04x%04x%04x" % (int(h) % 360, max(0, min(1000, int(s))), max(0, min(1000, int(v))))
+
+
 # Named scenes. White profiles use temp (0=warm…100=cool) + bright (0-100).
 # A "colour" [r,g,b] makes it a colour scene; temp/bright act as CCT fallback
 # for devices without colour support (the CCT bulb).
@@ -133,14 +138,16 @@ def match_profile(status: dict) -> str | None:
     colour = status.get("colour")
     for key, p in PROFILES.items():
         if "colour" in p:
-            # colour scene (Nacht = red): colour mode + red-ish hue. Brightness is
-            # not compared — the colour scene doesn't pin a brightness on the device.
+            # colour scene (Nacht = dim red): colour mode + red-ish hue + matching
+            # low brightness, so a manual bright red isn't mistaken for the scene.
+            # In colour mode brightness is the V of DPS 24 (→ max RGB channel), not DPS 22.
             if mode == "colour" and colour:
                 try:
                     r = int(colour[1:3], 16); g = int(colour[3:5], 16); b = int(colour[5:7], 16)
                 except (ValueError, IndexError):
                     continue
-                if r > 0 and g == 0 and b == 0:
+                cbright = round(max(r, g, b) / 255 * 100)
+                if r > 0 and g == 0 and b == 0 and close(cbright, p["bright"], tol=5):
                     return key
         elif mode == "white" and close(status.get("temp"), p["temp"]) and close(bright, p["bright"]):
             return key
@@ -152,7 +159,12 @@ def apply_profile(dev: tinytuya.BulbDevice, key: str):
     dev.turn_on()
     if "colour" in p:
         try:
-            dev.set_colour(*p["colour"])
+            import colorsys
+            r, g, b = p["colour"]
+            h, s, _ = colorsys.rgb_to_hsv(r / 255, g / 255, b / 255)
+            v = p.get("bright", 100) / 100  # colour brightness lives in DPS 24's V, not DPS 22
+            dev.set_value(21, "colour")
+            dev.set_value(24, _hsv_hex(round(h * 360), round(s * 1000), round(v * 1000)))
             return
         except Exception:
             pass  # CCT-only device → fall through to the white fallback
