@@ -12,8 +12,13 @@ CONFIG_PATH = Path(os.environ.get("LSC_CONFIG", Path(__file__).parent / "config"
 def load_config() -> dict:
     if not CONFIG_PATH.exists():
         raise FileNotFoundError(f"Config not found: {CONFIG_PATH}")
-    with CONFIG_PATH.open() as f:
-        return json.load(f)
+    raw = CONFIG_PATH.read_bytes()
+    for enc in ("utf-8", "cp1252", "latin-1"):
+        try:
+            return json.loads(raw.decode(enc))
+        except UnicodeDecodeError:
+            continue
+    raise ValueError(f"Could not decode {CONFIG_PATH} as UTF-8/CP1252/Latin-1")
 
 
 def make_device(cfg: dict) -> tinytuya.BulbDevice:
@@ -100,18 +105,26 @@ def set_colour(dev: tinytuya.BulbDevice, r: int, g: int, b: int):
     dev.set_colour(r, g, b)
 
 
-# Named white-light profiles (temp 0=warm … 100=cool, bright 0–100), like the app scenes.
+# Named scenes. White profiles use temp (0=warm…100=cool) + bright (0-100).
+# A "colour" [r,g,b] makes it a colour scene; temp/bright act as CCT fallback
+# for devices without colour support (the CCT bulb).
 PROFILES = {
     "working": {"label": "Arbeiten", "temp": 100, "bright": 100},
     "reading": {"label": "Lesen", "temp": 65, "bright": 90},
     "relax":   {"label": "Entspannen", "temp": 15, "bright": 55},
-    "night":   {"label": "Nacht", "temp": 0, "bright": 8},
+    "night":   {"label": "Nacht", "colour": [255, 0, 0], "temp": 0, "bright": 8},
 }
 
 
 def apply_profile(dev: tinytuya.BulbDevice, key: str):
     p = PROFILES[key]
     dev.turn_on()
+    if "colour" in p:
+        try:
+            dev.set_colour(*p["colour"])
+            return
+        except Exception:
+            pass  # CCT-only device → fall through to the white fallback
     dev.set_mode("white")
     dev.set_value(23, round(p["temp"] * 10))
     dev.set_value(22, max(10, round(p["bright"] / 100 * 990 + 10)))
