@@ -47,6 +47,7 @@ PAGE = """\
           padding:0; cursor:pointer; }
     .profiles { display:flex; gap:.4rem; flex-wrap:wrap; margin-top:.7rem; }
     .prof { font-size:.82rem; padding:.4rem .7rem; }
+    .prof.sel { background:#2e4d7d; border-color:#3f63a0; color:#dbe6ff; }
     .wu-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(120px,1fr));
                gap:.6rem 1rem; margin-top:.5rem; }
     .wu-grid input, .wu-grid select { width:100%; box-sizing:border-box;
@@ -83,6 +84,7 @@ PAGE = """\
   <script>
     let PROFILES = {};
     let partyActive = false;
+    let selected = {};  // device name -> currently chosen profile key
     async function api(path, opts) {
       const r = await fetch(path, opts);
       return r.json();
@@ -105,10 +107,10 @@ PAGE = """\
         </div>
         <div class="profiles ${dim}">
           ${Object.entries(PROFILES).map(([k, lbl]) =>
-            `<button class="prof" onclick="profile('${name}','${k}')">${lbl}</button>`).join('')}
-          ${s.supports_colour ? `<button class="prof" onclick="toggleParty('${name}')"
-            style="${partyActive ? 'background:#7d2e6b;border-color:#9c3a86;color:#ffd9f4' : ''}">
-            ${partyActive ? 'Party aus' : 'Party'}</button>` : ''}
+            `<button class="prof ${!partyActive && selected[name]===k ? 'sel':''}"
+              onclick="profile('${name}','${k}')">${lbl}</button>`).join('')}
+          ${s.supports_colour ? `<button class="prof ${partyActive ? 'sel':''}"
+            onclick="toggleParty('${name}')">Party</button>` : ''}
         </div>
         <div class="${dim}">
           <label>Helligkeit: <span id="bl-${name}">${s.bright ?? '-'}</span>%</label>
@@ -145,16 +147,24 @@ PAGE = """\
       refresh();
     }
     async function setv(name, kind, val) {
+      selected[name] = null;
       await api(`/api/${name}/${kind}`, {method:'POST',
         headers:{'Content-Type':'application/json'}, body:JSON.stringify({value:+val})});
     }
     async function setcolour(name, hex) {
+      selected[name] = null;
       await api(`/api/${name}/colour`, {method:'POST',
         headers:{'Content-Type':'application/json'}, body:JSON.stringify({hex})});
     }
     async function profile(name, key) {
+      if (partyActive) {
+        await api('/api/party', {method:'POST',
+          headers:{'Content-Type':'application/json'}, body:JSON.stringify({on:false})});
+        partyActive = false;
+      }
       await api(`/api/${name}/profile`, {method:'POST',
         headers:{'Content-Type':'application/json'}, body:JSON.stringify({key})});
+      selected[name] = key;
       refresh();
     }
     const DAYNAMES = ['Mo','Di','Mi','Do','Fr','Sa','So'];
@@ -199,6 +209,7 @@ PAGE = """\
         headers:{'Content-Type':'application/json'},
         body:JSON.stringify({on: !partyActive, device: name})});
       partyActive = r.active;
+      if (partyActive) selected[name] = null;
       refresh();
     }
     (async () => {
