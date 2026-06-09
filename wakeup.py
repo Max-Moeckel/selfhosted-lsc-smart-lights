@@ -25,6 +25,12 @@ _running = threading.Event()
 # short test ramps from flooding the device with LAN calls.
 MIN_INTERVAL = 0.3
 BRIGHT_STEPS = 1000
+# Fraction of the ramp spent in colour mode (red → near-white) before handing
+# off to white-CCT mode. White-CCT is physically brighter than colour mode at
+# the same numeric level, so the switch must happen while still dim — at this
+# low brightness the mode luminance gap is imperceptible, then the long white
+# phase does all the real brightening up to Arbeiten max.
+SWITCH = 0.15
 
 
 def _hsv_hex(h: int, s: int, v: int) -> str:
@@ -66,24 +72,52 @@ def run_sunrise(device: str, duration_min: float):
         except Exception:
             pass
         step = max(MIN_INTERVAL, total / BRIGHT_STEPS)
-        last_hex = None
+        white_set = False
+        last_hex = last_braw = last_traw = None
         start = time.time()
         while True:
             frac = min(1.0, (time.time() - start) / total)
-            # smoothstep: eases in at the start and out at the end (no abrupt finish)
-            ease = frac * frac * (3 - 2 * frac)
-            # one continuous HSV curve: deep red → warm orange, desaturating toward
-            # warm white, brightness rising the whole way (single mode, no switch)
-            h = round(35 * frac)              # 0° red → 35° warm orange
-            s = round(1000 - 700 * frac)      # 1000 saturated → 300 pale/warm
-            v = round(10 + 990 * ease)
-            hexval = _hsv_hex(h, s, v)
-            if hexval != last_hex:
-                try:
-                    dev.set_value(24, hexval)
-                except Exception:
-                    pass
-                last_hex = hexval
+            # gamma curve: stays very dim for most of the ramp, brightens late —
+            # like a real sunrise, and avoids the "starts too bright" feel
+            bright = frac ** 3
+            if frac < SWITCH:
+                # colour phase: red → warm orange, desaturating almost to white,
+                # brightness following the global curve
+                la = frac / SWITCH
+                h = round(35 * la)
+                s = round(1000 - 900 * la)        # → ~100, nearly white at the handoff
+                v = round(10 + 990 * bright)
+                hexval = _hsv_hex(h, s, v)
+                if hexval != last_hex:
+                    try:
+                        dev.set_value(24, hexval)
+                    except Exception:
+                        pass
+                    last_hex = hexval
+            else:
+                # white CCT phase: brightness keeps the same curve up to full, colour
+                # temp ramps warm → cool, ending exactly like the "Arbeiten" profile
+                if not white_set:
+                    try:
+                        dev.set_value(21, "white")
+                    except Exception:
+                        pass
+                    white_set = True
+                lb = (frac - SWITCH) / (1 - SWITCH)
+                braw = max(10, round(10 + 990 * bright))
+                traw = round(lb * 1000)
+                if traw != last_traw:
+                    try:
+                        dev.set_value(23, traw)
+                    except Exception:
+                        pass
+                    last_traw = traw
+                if braw != last_braw:
+                    try:
+                        dev.set_value(22, braw)
+                    except Exception:
+                        pass
+                    last_braw = braw
             if frac >= 1.0:
                 break
             time.sleep(step)
