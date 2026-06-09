@@ -46,18 +46,38 @@ def _find(dps: dict, *keys):
     return None
 
 
+def _colour_hex_to_rgb(hexval: str) -> str | None:
+    """Tuya colour_data_v2 (HHHHSSSSVVVV hex) → #rrggbb."""
+    if not hexval or len(hexval) < 12:
+        return None
+    try:
+        h = int(hexval[0:4], 16)
+        s = int(hexval[4:8], 16) / 1000
+        v = int(hexval[8:12], 16) / 1000
+    except ValueError:
+        return None
+    import colorsys
+    r, g, b = colorsys.hsv_to_rgb(h / 360, s, v)
+    return "#{:02x}{:02x}{:02x}".format(round(r * 255), round(g * 255), round(b * 255))
+
+
 def parse_status(dps: dict | None) -> dict:
-    """Normalise raw DPS into {online, on, bright, temp} with bright/temp as 0-100."""
+    """Normalise raw DPS into {online, on, bright, temp, mode, supports_colour, colour}."""
     if dps is None:
-        return {"online": False, "on": None, "bright": None, "temp": None}
+        return {"online": False, "on": None, "bright": None, "temp": None,
+                "mode": None, "supports_colour": False, "colour": None}
     on = _find(dps, 20)
     bright_raw = _find(dps, 22)
     temp_raw = _find(dps, 23)
+    colour_raw = _find(dps, 24)
     return {
         "online": True,
         "on": bool(on) if on is not None else None,
         "bright": round((bright_raw - 10) / 990 * 100) if bright_raw is not None else None,
         "temp": round(temp_raw / 10) if temp_raw is not None else None,
+        "mode": _find(dps, 21),
+        "supports_colour": "24" in dps,
+        "colour": _colour_hex_to_rgb(colour_raw) if colour_raw else None,
     }
 
 
@@ -71,4 +91,10 @@ def set_bright(dev: tinytuya.BulbDevice, pct: int):
 
 
 def set_temp(dev: tinytuya.BulbDevice, pct: int):
+    # ensure white mode so colour temp is visible, then set it
+    dev.set_mode("white")
     dev.set_value(23, round(pct * 10))
+
+
+def set_colour(dev: tinytuya.BulbDevice, r: int, g: int, b: int):
+    dev.set_colour(r, g, b)

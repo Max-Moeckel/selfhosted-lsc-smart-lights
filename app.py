@@ -34,6 +34,12 @@ PAGE = """\
     input[type=range] { width:100%; accent-color:#5b8cff; }
     .ctl { margin-top:.4rem; }
     .muted { opacity:.4; pointer-events:none; }
+    .colourrow { display:flex; align-items:center; gap:.6rem; margin-top:.4rem; }
+    input[type=color] { width:46px; height:34px; border:none; background:none;
+                        border-radius:8px; cursor:pointer; padding:0; }
+    .swatches { display:flex; gap:.35rem; flex-wrap:wrap; }
+    .sw { width:26px; height:26px; border-radius:6px; border:1px solid #00000040;
+          padding:0; cursor:pointer; }
   </style>
 </head>
 <body>
@@ -69,6 +75,17 @@ PAGE = """\
           <input type="range" min="0" max="100" value="${s.temp ?? 50}"
             class="ctl" oninput="document.getElementById('tl-${name}').textContent=this.value"
             onchange="setv('${name}','temp',this.value)">
+          ${s.supports_colour ? `
+          <label>Farbe</label>
+          <div class="colourrow">
+            <input type="color" value="${s.colour ?? '#ffffff'}"
+              onchange="setcolour('${name}', this.value)">
+            <span class="swatches">
+              ${['#ff0000','#ff8000','#ffff00','#00ff00','#00ffff','#0000ff','#ff00ff','#ffffff']
+                .map(c => `<button class="sw" style="background:${c}"
+                          onclick="setcolour('${name}','${c}')"></button>`).join('')}
+            </span>
+          </div>` : ''}
         </div>
       </div>`;
     }
@@ -85,6 +102,10 @@ PAGE = """\
     async function setv(name, kind, val) {
       await api(`/api/${name}/${kind}`, {method:'POST',
         headers:{'Content-Type':'application/json'}, body:JSON.stringify({value:+val})});
+    }
+    async function setcolour(name, hex) {
+      await api(`/api/${name}/colour`, {method:'POST',
+        headers:{'Content-Type':'application/json'}, body:JSON.stringify({hex})});
     }
     refresh();
     setInterval(refresh, 10000);
@@ -149,6 +170,22 @@ def temp(name):
     val = max(0, min(100, int(request.json.get("value", 50))))
     try:
         lamp.set_temp(dev, val)
+        return jsonify({"ok": True})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 502
+
+
+@app.post("/api/<name>/colour")
+def colour(name):
+    _, dev = _device(name)
+    if dev is None:
+        return jsonify({"error": "unknown device"}), 404
+    hexval = (request.json.get("hex") or "").lstrip("#")
+    if len(hexval) != 6:
+        return jsonify({"error": "invalid colour"}), 400
+    try:
+        r, g, b = (int(hexval[i:i + 2], 16) for i in (0, 2, 4))
+        lamp.set_colour(dev, r, g, b)
         return jsonify({"ok": True})
     except Exception as e:
         return jsonify({"error": str(e)}), 502
