@@ -75,7 +75,7 @@ PAGE = """\
     <div class="days" id="wu-days"></div>
     <div class="row" style="margin-top:.9rem">
       <button onclick="saveWakeup()">Speichern</button>
-      <button onclick="testWakeup()">2-min-Test</button>
+      <button onclick="testWakeup()">30-Sek-Test</button>
     </div>
   </div>
   <div id="lamps"></div>
@@ -295,10 +295,10 @@ def wakeup_set():
 @app.post("/api/wakeup/test")
 def wakeup_test():
     cfg = wakeup.load()
-    # short 2-minute preview so you don't wait the full duration
+    # short 30-second preview so you don't wait the full duration
     threading.Thread(
         target=wakeup.run_sunrise,
-        args=(cfg["device"], 2, cfg["end_temp"]),
+        args=(cfg["device"], 0.5, cfg["end_temp"]),
         daemon=True,
     ).start()
     return jsonify({"ok": True})
