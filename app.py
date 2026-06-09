@@ -13,74 +13,64 @@ wakeup.start()
 
 PAGE = """\
 <!doctype html>
-<html lang="de">
+<html lang="de" data-bs-theme="dark">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Lichtsteuerung</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
+        rel="stylesheet"
+        integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH"
+        crossorigin="anonymous">
   <style>
-    :root { color-scheme: dark; }
-    body { font-family: system-ui, sans-serif; background:#15171c; color:#e8e8e8;
-           margin:0; padding:1.5rem; }
-    h1 { font-size:1.3rem; font-weight:600; margin:0 0 1rem; }
-    .card { background:#1f2229; border:1px solid #2c2f38; border-radius:14px;
-            padding:1.1rem 1.2rem; margin-bottom:1rem; }
-    .row { display:flex; align-items:center; justify-content:space-between; gap:1rem; }
-    .name { font-size:1.05rem; font-weight:600; }
-    .state { font-size:.8rem; padding:.15rem .55rem; border-radius:99px; }
-    .on  { background:#2e5d34; color:#bff5c4; }
-    .off { background:#3a3d44; color:#b9bdc7; }
-    .offline { background:#5d2e2e; color:#f5bfbf; }
-    button { background:#2c2f38; color:#e8e8e8; border:1px solid #3a3d44;
-             border-radius:9px; padding:.5rem .9rem; font-size:.9rem; cursor:pointer; }
-    button:hover { background:#363a44; }
-    button.power { min-width:64px; }
-    label { display:block; font-size:.78rem; color:#9aa0ac; margin:.9rem 0 .25rem; }
-    input[type=range] { width:100%; accent-color:#5b8cff; }
-    .ctl { margin-top:.4rem; }
-    .muted { opacity:.4; pointer-events:none; }
-    .colourrow { display:flex; align-items:center; gap:.6rem; margin-top:.4rem; }
-    input[type=color] { width:46px; height:34px; border:none; background:none;
-                        border-radius:8px; cursor:pointer; padding:0; }
+    body { background:#15171c; }
+    .container { max-width: 960px; }
+    input[type=range] { accent-color:#5b8cff; }
+    input[type=color] { width:46px; height:38px; padding:0; }
     .swatches { display:flex; gap:.35rem; flex-wrap:wrap; }
-    .sw { width:26px; height:26px; border-radius:6px; border:1px solid #00000040;
+    .sw { width:30px; height:30px; border-radius:6px; border:1px solid #00000040;
           padding:0; cursor:pointer; }
-    .profiles { display:flex; gap:.4rem; flex-wrap:wrap; margin-top:.7rem; }
-    .prof { font-size:.82rem; padding:.4rem .7rem; }
-    .prof.sel { background:#2e4d7d; border-color:#3f63a0; color:#dbe6ff; }
-    .wu-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(120px,1fr));
-               gap:.6rem 1rem; margin-top:.5rem; }
-    .wu-grid input, .wu-grid select { width:100%; box-sizing:border-box;
-       background:#15171c; color:#e8e8e8; border:1px solid #3a3d44;
-       border-radius:8px; padding:.4rem; }
-    .switch { font-size:.85rem; color:#9aa0ac; display:flex; align-items:center; gap:.4rem; }
-    .days { display:flex; gap:.35rem; flex-wrap:wrap; margin-top:.3rem; }
-    .day { width:38px; padding:.35rem 0; text-align:center; font-size:.8rem; }
-    .day.on { background:#2e4d7d; border-color:#3f63a0; color:#dbe6ff; }
+    .day { min-width:42px; }
   </style>
 </head>
-<body>
-  <h1>Lichtsteuerung</h1>
-  <div class="card" id="wakeup">
-    <div class="row">
-      <span class="name">Wake-up Light</span>
-      <label class="switch"><input type="checkbox" id="wu-enabled"> aktiv</label>
-    </div>
-    <div class="wu-grid">
-      <div><label>Startzeit</label><input type="time" id="wu-time"></div>
-      <div><label>Dauer: <span id="wu-durl">30</span> min</label>
-        <input type="range" id="wu-dur" min="10" max="60" step="5" value="30"
-          oninput="document.getElementById('wu-durl').textContent=this.value"></div>
-      <div><label>Lampe</label><select id="wu-device"></select></div>
-    </div>
-    <label>Wochentage</label>
-    <div class="days" id="wu-days"></div>
-    <div class="row" style="margin-top:.9rem">
-      <button onclick="saveWakeup()">Speichern</button>
-      <button onclick="testWakeup()">30-Sek-Test</button>
+<body class="text-light">
+  <div class="container py-3">
+    <h1 class="h4 fw-semibold mb-3">Lichtsteuerung</h1>
+    <div id="lamps" class="row g-3"></div>
+
+    <div class="card bg-dark border-secondary mt-4" id="wakeup">
+      <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+          <h2 class="h6 mb-0">Wake-up Light</h2>
+          <div class="form-check form-switch m-0">
+            <input class="form-check-input" type="checkbox" id="wu-enabled">
+            <label class="form-check-label small" for="wu-enabled">aktiv</label>
+          </div>
+        </div>
+        <div class="row g-3">
+          <div class="col-12 col-sm-4">
+            <label class="form-label small">Startzeit</label>
+            <input type="time" class="form-control" id="wu-time">
+          </div>
+          <div class="col-12 col-sm-4">
+            <label class="form-label small">Dauer: <span id="wu-durl">30</span> min</label>
+            <input type="range" class="form-range" id="wu-dur" min="10" max="60" step="5" value="30"
+              oninput="document.getElementById('wu-durl').textContent=this.value">
+          </div>
+          <div class="col-12 col-sm-4">
+            <label class="form-label small">Lampe</label>
+            <select class="form-select" id="wu-device"></select>
+          </div>
+        </div>
+        <label class="form-label small mt-3">Wochentage</label>
+        <div class="d-flex flex-wrap gap-1" id="wu-days"></div>
+        <div class="d-flex gap-2 mt-3">
+          <button class="btn btn-primary btn-sm" onclick="saveWakeup()">Speichern</button>
+          <button class="btn btn-outline-light btn-sm" onclick="testWakeup()">30-Sek-Test</button>
+        </div>
+      </div>
     </div>
   </div>
-  <div id="lamps"></div>
   <script>
     let PROFILES = {};
     let partyActive = false;
@@ -92,51 +82,55 @@ PAGE = """\
     }
     function card(name, s) {
       const off = !s.online;
-      const stateCls = off ? 'offline' : (s.on ? 'on' : 'off');
+      const stateCls = off ? 'text-bg-danger' : (s.on ? 'text-bg-success' : 'text-bg-secondary');
       const stateTxt = off ? 'offline' : (s.on ? 'an' : 'aus');
-      const dim = off ? 'muted' : '';
+      const dim = off ? 'opacity-50 pe-none' : '';
+      const psel = (on) => on ? 'btn-primary' : 'btn-outline-light';
       return `
-      <div class="card">
-        <div class="row">
-          <span class="name">${name}</span>
-          <span class="state ${stateCls}">${stateTxt}</span>
+      <div class="col-12 col-md-6">
+      <div class="card bg-dark border-secondary h-100">
+        <div class="card-body">
+          <div class="d-flex justify-content-between align-items-center mb-2">
+            <span class="fw-semibold">${name}</span>
+            <span class="badge ${stateCls}">${stateTxt}</span>
+          </div>
+          <div class="${dim}">
+            <button class="btn btn-sm ${s.on ? 'btn-secondary' : 'btn-success'} mb-2"
+              style="min-width:64px" onclick="power('${name}', ${s.on ? 'false':'true'})">
+              ${s.on ? 'Aus' : 'An'}
+            </button>
+            <div class="d-flex flex-wrap gap-1 mb-3">
+              ${Object.entries(PROFILES).map(([k, lbl]) =>
+                `<button class="btn btn-sm ${psel(!partyActive && selected[name]===k)}"
+                  onclick="profile('${name}','${k}')">${lbl}</button>`).join('')}
+              ${s.supports_colour ? `
+              <button class="btn btn-sm ${psel(partyMode==='smooth')}"
+                onclick="toggleParty('${name}','smooth')">Party</button>
+              <button class="btn btn-sm ${psel(partyMode==='strobe')}"
+                onclick="toggleParty('${name}','strobe')">Strobo</button>` : ''}
+            </div>
+            <label class="form-label small mb-1">Helligkeit: <span id="bl-${name}">${s.bright ?? '-'}</span>%</label>
+            <input type="range" class="form-range" min="1" max="100" value="${s.bright ?? 50}"
+              oninput="document.getElementById('bl-${name}').textContent=this.value"
+              onchange="setv('${name}','bright',this.value)">
+            <label class="form-label small mb-1">Farbtemperatur (warm→kalt): <span id="tl-${name}">${s.temp ?? '-'}</span>%</label>
+            <input type="range" class="form-range" min="0" max="100" value="${s.temp ?? 50}"
+              oninput="document.getElementById('tl-${name}').textContent=this.value"
+              onchange="setv('${name}','temp',this.value)">
+            ${s.supports_colour ? `
+            <label class="form-label small mb-1">Farbe</label>
+            <div class="d-flex align-items-center gap-2 flex-wrap">
+              <input type="color" class="form-control form-control-color" value="${s.colour ?? '#ffffff'}"
+                onchange="setcolour('${name}', this.value)">
+              <span class="swatches">
+                ${['#ff0000','#ff8000','#ffff00','#00ff00','#00ffff','#0000ff','#ff00ff','#ffffff']
+                  .map(c => `<button class="sw" style="background:${c}"
+                            onclick="setcolour('${name}','${c}')"></button>`).join('')}
+              </span>
+            </div>` : ''}
+          </div>
         </div>
-        <div class="row ctl ${dim}">
-          <button class="power" onclick="power('${name}', ${s.on ? 'false':'true'})">
-            ${s.on ? 'Aus' : 'An'}
-          </button>
-        </div>
-        <div class="profiles ${dim}">
-          ${Object.entries(PROFILES).map(([k, lbl]) =>
-            `<button class="prof ${!partyActive && selected[name]===k ? 'sel':''}"
-              onclick="profile('${name}','${k}')">${lbl}</button>`).join('')}
-          ${s.supports_colour ? `
-          <button class="prof ${partyMode==='smooth' ? 'sel':''}"
-            onclick="toggleParty('${name}','smooth')">Party</button>
-          <button class="prof ${partyMode==='strobe' ? 'sel':''}"
-            onclick="toggleParty('${name}','strobe')">Strobo</button>` : ''}
-        </div>
-        <div class="${dim}">
-          <label>Helligkeit: <span id="bl-${name}">${s.bright ?? '-'}</span>%</label>
-          <input type="range" min="1" max="100" value="${s.bright ?? 50}"
-            class="ctl" oninput="document.getElementById('bl-${name}').textContent=this.value"
-            onchange="setv('${name}','bright',this.value)">
-          <label>Farbtemperatur (warm→kalt): <span id="tl-${name}">${s.temp ?? '-'}</span>%</label>
-          <input type="range" min="0" max="100" value="${s.temp ?? 50}"
-            class="ctl" oninput="document.getElementById('tl-${name}').textContent=this.value"
-            onchange="setv('${name}','temp',this.value)">
-          ${s.supports_colour ? `
-          <label>Farbe</label>
-          <div class="colourrow">
-            <input type="color" value="${s.colour ?? '#ffffff'}"
-              onchange="setcolour('${name}', this.value)">
-            <span class="swatches">
-              ${['#ff0000','#ff8000','#ffff00','#00ff00','#00ffff','#0000ff','#ff00ff','#ffffff']
-                .map(c => `<button class="sw" style="background:${c}"
-                          onclick="setcolour('${name}','${c}')"></button>`).join('')}
-            </span>
-          </div>` : ''}
-        </div>
+      </div>
       </div>`;
     }
     async function refresh() {
@@ -177,7 +171,8 @@ PAGE = """\
     let wuDays = [];
     function renderDays() {
       document.getElementById('wu-days').innerHTML = DAYNAMES.map((d,i) =>
-        `<button class="day ${wuDays.includes(i)?'on':''}" onclick="toggleDay(${i})">${d}</button>`
+        `<button class="btn btn-sm day ${wuDays.includes(i)?'btn-primary':'btn-outline-light'}"
+          onclick="toggleDay(${i})">${d}</button>`
       ).join('');
     }
     function toggleDay(i) {
