@@ -3,17 +3,17 @@ let partyActive = false;
 let partyMode = null;  // "smooth" | "strobe" | "music" | null
 let partyBpm = 0;      // music mode: current server tempo (manual or mic-detected)
 let micOn = false;     // true while the mic is detecting and driving the tempo
-// Manually tunable detection band + threshold (set via the sliders in the card).
-// A beat = the average FFT magnitude inside [micFreqLo, micFreqHi] rising across
-// micThresh. _binHz is the Hz width of one FFT bin (set once the AudioContext exists).
-let micFreqLo = 60, micFreqHi = 3000, micThresh = 140, _binHz = 1;
-// Helligkeit folgt der Band-Intensität: Pegel unter micBriThresh → dunkel,
-// darüber linear bis voll. Eigene Schwelle, getrennt von der Beat-Erkennung.
-let micBriThresh = 120;
+// Manually tunable detection band (set via the sliders in the card). A beat = the
+// average FFT magnitude inside [micFreqLo, micFreqHi] rising across an auto-set
+// threshold. _binHz is the Hz width of one FFT bin (set once the AudioContext exists).
+let micFreqLo = 60, micFreqHi = 3000, _binHz = 1;
+// Beat threshold = this fraction of the adaptive peak band level (lMax). The floor
+// doesn't matter here — onsets are relative to how hard the loudest hits land.
+const BEAT_FRAC = 0.6;
 // Anpasszeit in Sekunden: Zeitkonstante, über die das Centroid-Fenster auf den
 // aktuellen Bereich zusammenschrumpft. Kürzer = reaktiver, mehr Farbwechsel auch
 // bei höhenlastigen Songs; länger = ruhiger, näher an absoluter Zuordnung.
-let micSpreadSec = 4;
+let micSpreadSec = 30;
 let selected = {};  // device name -> currently chosen profile key
 let deviceNames = [];
 let statusByName = {};  // last known status per device, for instant re-renders
@@ -89,19 +89,9 @@ function card(name, s) {
               oninput="micFreqHi=Math.max(+this.value,micFreqLo+100);document.getElementById('bl-hi-${name}').textContent=micFreqHi">
           </div>
           <div class="d-flex align-items-center gap-2 small mb-1">
-            <span style="width:7.5em">Beat-Schwelle: <span id="th-${name}">${micThresh}</span></span>
-            <input type="range" class="form-range" min="0" max="255" value="${micThresh}"
-              oninput="micThresh=+this.value;document.getElementById('th-${name}').textContent=micThresh">
-          </div>
-          <div class="d-flex align-items-center gap-2 small mb-1">
-            <span style="width:7.5em">Hell-Schwelle: <span id="bt-${name}">${micBriThresh}</span></span>
-            <input type="range" class="form-range" min="0" max="255" value="${micBriThresh}"
-              oninput="micBriThresh=+this.value;document.getElementById('bt-${name}').textContent=micBriThresh">
-          </div>
-          <div class="d-flex align-items-center gap-2 small mb-1">
-            <span style="width:7.5em">Anpassung: <span id="sp-${name}">${micSpreadSec}</span> s</span>
-            <input type="range" class="form-range" min="0.5" max="15" step="0.5" value="${micSpreadSec}"
-              oninput="micSpreadSec=+this.value;document.getElementById('sp-${name}').textContent=micSpreadSec">
+            <span style="width:8.5em">Anpassung: <span id="sp-${name}">${fmtSpread(micSpreadSec)}</span></span>
+            <input type="range" class="form-range" min="0" max="100" step="1"
+              value="${spreadPos(micSpreadSec)}" oninput="setSpread('${name}',+this.value)">
           </div>` : ''}
           <div class="small text-secondary" id="mic-${name}"></div>
         </div>` : ''}
@@ -290,6 +280,22 @@ async function setBpm(name) {
   renderCards();
 }
 
+// Adaptation-time slider runs on a log scale (0.5 s … 120 s) so the short, common
+// values stay precise while still reaching 2-minute windows. Position 0–100 ↔ seconds.
+const SPREAD_MIN = 0.5, SPREAD_RATIO = 240;   // 0.5 s × 240 = 120 s
+function spreadPos(sec) {
+  return Math.round(100 * Math.log(sec / SPREAD_MIN) / Math.log(SPREAD_RATIO));
+}
+function fmtSpread(sec) {
+  return sec >= 60 ? (sec / 60).toFixed(1) + ' min' : sec + ' s';
+}
+function setSpread(name, pos) {
+  const sec = SPREAD_MIN * Math.pow(SPREAD_RATIO, pos / 100);
+  micSpreadSec = sec >= 10 ? Math.round(sec) : Math.round(sec * 10) / 10;
+  const el = document.getElementById('sp-' + name);
+  if (el) el.textContent = fmtSpread(micSpreadSec);
+}
+
 // --- Mic tempo detection (Web Audio). Reports the detected BPM to the server,
 // which then metronomes at that tempo until a new BPM is reported. ---
 let _ac = null, _ms = null, _raf = null, _src = null, _an = null;
@@ -317,6 +323,7 @@ async function startMic(name) {
   const buf = new Uint8Array(an.frequencyBinCount);
   let prevLevel = 0, last = 0, sentBpm = 0, flashUntil = 0, lastSync = 0;
   let cMin = null, cMax = null;      // adaptive centroid range, in log-Hz
+  let lMin = null, lMax = null;      // adaptive band-level range, drives brightness
   let lastFrame = 0;                  // for frame-rate-independent adaptation timing
   let beats = [];                    // recent onset timestamps for tempo estimation
   const meter = () => document.getElementById('mic-' + name);
@@ -353,16 +360,23 @@ async function startMic(name) {
     const span = Math.max(0.3, cMax - cMin);   // floor avoids hue jitter when near-constant
     const ct = Math.max(0, Math.min(1, (lf - cMin) / span));
     const hue = Math.round(ct * 280);          // 0 red (bass) → 280 violet (treble)
-    // Brightness from band intensity through its own threshold: below → dim, then
-    // linear up to full. Floored so the lamp never goes fully dark mid-track.
-    const bnorm = Math.max(0, Math.min(1, (level - micBriThresh) / Math.max(1, 255 - micBriThresh)));
+    // Brightness from band intensity, auto-ranged like the centroid: track the
+    // band level's own recent min/max and map within it, so quiet and loud tracks
+    // both use the full brightness span without a manual threshold.
+    if (lMin === null) { lMin = lMax = level; }
+    if (level < lMin) lMin = level; else lMin += (level - lMin) * decay;
+    if (level > lMax) lMax = level; else lMax += (level - lMax) * decay;
+    const lspan = Math.max(20, lMax - lMin);   // floor avoids brightness jitter in near-silence
+    const bnorm = Math.max(0, Math.min(1, (level - lMin) / lspan));
     const v = Math.round(350 + 650 * bnorm);
-    // rising edge across the threshold, with a refractory gap (~max 300 bpm)
-    const isBeat = level > micThresh && prevLevel <= micThresh && now - last > 200;
+    // auto beat threshold at a fraction of the adaptive peak; rising edge across
+    // it = onset, with a refractory gap (~max 300 bpm)
+    const beatThresh = BEAT_FRAC * lMax;
+    const isBeat = level > beatThresh && prevLevel <= beatThresh && now - last > 200;
     prevLevel = level;
     if (isBeat) flashUntil = now + 120;
     const cMinBin = (100 * 2 ** cMin) / _binHz, cMaxBin = (100 * 2 ** cMax) / _binHz;
-    drawSpectrum(name, buf, loBin, hiBin, now < flashUntil, cbin, hue, cMinBin, cMaxBin);
+    drawSpectrum(name, buf, loBin, hiBin, now < flashUntil, cbin, hue, cMinBin, cMaxBin, lMin, lMax, beatThresh);
     // feed the server the live colour+brightness ~5 Hz; it renders on its metronome
     if (now - lastSync > 180) {
       lastSync = now;
@@ -407,7 +421,7 @@ async function startMic(name) {
 // Live FFT bars up to ~8 kHz. In-band bins (beat band) are highlighted, out-of-band
 // dimmed. A horizontal line marks the beat threshold; a vertical line (coloured in
 // the hue it produces) marks the spectral centroid that drives the colour.
-function drawSpectrum(name, buf, loBin, hiBin, flash, centroidBin, hue, cMinBin, cMaxBin) {
+function drawSpectrum(name, buf, loBin, hiBin, flash, centroidBin, hue, cMinBin, cMaxBin, briFloor, briCeil, beatThresh) {
   const cv = document.getElementById('spec-' + name);
   if (!cv) return;
   const w = cv.clientWidth || 300, h = cv.height;
@@ -441,24 +455,27 @@ function drawSpectrum(name, buf, loBin, hiBin, flash, centroidBin, hue, cMinBin,
     ctx.lineTo(cx, h);
     ctx.stroke();
   }
-  // Both thresholds compare against the same band level, so both are drawn only
-  // across the beat band. Beat (orange) gates onset detection, brightness (green)
-  // gates the intensity → brightness mapping.
+  // Lines over the beat band, since they all relate to the band level. Beat
+  // threshold (orange, = 60% of the peak) gates onset detection; the two green
+  // lines are the auto-ranged brightness floor/ceiling brightness maps between.
   const bandL = (loBin - 1) * bw, bandR = hiBin * bw;
-  const ty = h - micThresh / 255 * h;
+  const ty = h - beatThresh / 255 * h;
   ctx.strokeStyle = flash ? '#ff5555' : '#ffb000';
   ctx.lineWidth = flash ? 2 : 1;
   ctx.beginPath();
   ctx.moveTo(bandL, ty);
   ctx.lineTo(bandR, ty);
   ctx.stroke();
-  const by = h - micBriThresh / 255 * h;
   ctx.strokeStyle = '#3ddc84';
   ctx.lineWidth = 1;
-  ctx.beginPath();
-  ctx.moveTo(bandL, by);
-  ctx.lineTo(bandR, by);
-  ctx.stroke();
+  for (const lvl of [briFloor, briCeil]) {
+    if (lvl == null) continue;
+    const y = h - lvl / 255 * h;
+    ctx.beginPath();
+    ctx.moveTo(bandL, y);
+    ctx.lineTo(bandR, y);
+    ctx.stroke();
+  }
 }
 
 function stopMic() {
