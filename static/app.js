@@ -8,10 +8,24 @@ async function api(path, opts) {
   return r.json();
 }
 
+// status used before the first /api/status returns: controls are shown and
+// clickable, only the colour/party widgets (which need device capabilities)
+// wait for real status.
+function pendingStatus() {
+  return {online: true, on: false, bright: null, temp: null,
+          mode: null, supports_colour: false, colour: null, pending: true};
+}
+
 function card(name, s) {
   const off = !s.online;
+  const pending = !!s.pending;
   const stateCls = off ? 'text-bg-danger' : (s.on ? 'text-bg-success' : 'text-bg-secondary');
   const stateTxt = off ? 'offline' : (s.on ? 'an' : 'aus');
+  const badge = pending
+    ? `<span class="badge text-bg-secondary">
+         <span class="spinner-border spinner-border-sm" style="width:.8rem;height:.8rem"></span>
+       </span>`
+    : `<span class="badge ${stateCls}">${stateTxt}</span>`;
   const dim = off ? 'opacity-50 pe-none' : '';
   const psel = (on) => on ? 'btn-primary' : 'btn-outline-light';
   return `
@@ -20,7 +34,7 @@ function card(name, s) {
     <div class="card-body">
       <div class="d-flex justify-content-between align-items-center mb-2">
         <span class="fw-semibold">${name}</span>
-        <span class="badge ${stateCls}">${stateTxt}</span>
+        ${badge}
       </div>
       <div class="${dim}">
         <button class="btn btn-sm ${s.on ? 'btn-secondary' : 'btn-success'} mb-2"
@@ -62,29 +76,9 @@ function card(name, s) {
   </div>`;
 }
 
-function skeleton(name) {
-  return `
-  <div class="col-12 col-md-6">
-  <div class="card bg-dark border-secondary h-100">
-    <div class="card-body">
-      <div class="d-flex justify-content-between align-items-center mb-2">
-        <span class="fw-semibold">${name}</span>
-        <span class="badge text-bg-secondary">
-          <span class="spinner-border spinner-border-sm" style="width:.8rem;height:.8rem"></span>
-        </span>
-      </div>
-      <div class="placeholder-glow">
-        <span class="placeholder col-3 mb-2"></span>
-        <span class="placeholder col-12"></span>
-        <span class="placeholder col-12"></span>
-      </div>
-    </div>
-  </div>
-  </div>`;
-}
-
-function renderSkeletons(names) {
-  document.getElementById('lamps').innerHTML = names.map(skeleton).join('');
+function renderPending(names) {
+  document.getElementById('lamps').innerHTML =
+    names.map(n => card(n, pendingStatus())).join('');
 }
 
 async function refresh() {
@@ -185,7 +179,7 @@ async function toggleParty(name, mode) {
 (async () => {
   const [profiles, names] = await Promise.all([api('/api/profiles'), api('/api/devices')]);
   PROFILES = profiles;
-  renderSkeletons(names);          // show lamp cards immediately
+  renderPending(names);            // show clickable lamp cards immediately
   loadWakeup(names);               // populate the wake-up panel in parallel
   refresh();                       // fill in live status when it arrives
   setInterval(refresh, 10000);
