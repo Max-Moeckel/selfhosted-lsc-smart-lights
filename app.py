@@ -84,6 +84,7 @@ PAGE = """\
   <script>
     let PROFILES = {};
     let partyActive = false;
+    let partyMode = null;  // "smooth" | "strobe" | null
     let selected = {};  // device name -> currently chosen profile key
     async function api(path, opts) {
       const r = await fetch(path, opts);
@@ -109,8 +110,11 @@ PAGE = """\
           ${Object.entries(PROFILES).map(([k, lbl]) =>
             `<button class="prof ${!partyActive && selected[name]===k ? 'sel':''}"
               onclick="profile('${name}','${k}')">${lbl}</button>`).join('')}
-          ${s.supports_colour ? `<button class="prof ${partyActive ? 'sel':''}"
-            onclick="toggleParty('${name}')">Party</button>` : ''}
+          ${s.supports_colour ? `
+          <button class="prof ${partyMode==='smooth' ? 'sel':''}"
+            onclick="toggleParty('${name}','smooth')">Party</button>
+          <button class="prof ${partyMode==='strobe' ? 'sel':''}"
+            onclick="toggleParty('${name}','strobe')">Strobo</button>` : ''}
         </div>
         <div class="${dim}">
           <label>Helligkeit: <span id="bl-${name}">${s.bright ?? '-'}</span>%</label>
@@ -138,6 +142,7 @@ PAGE = """\
     async function refresh() {
       const [data, party] = await Promise.all([api('/api/status'), api('/api/party')]);
       partyActive = party.active;
+      partyMode = party.mode;
       document.getElementById('lamps').innerHTML =
         Object.entries(data).map(([n, s]) => card(n, s)).join('');
     }
@@ -161,6 +166,7 @@ PAGE = """\
         await api('/api/party', {method:'POST',
           headers:{'Content-Type':'application/json'}, body:JSON.stringify({on:false})});
         partyActive = false;
+        partyMode = null;
       }
       await api(`/api/${name}/profile`, {method:'POST',
         headers:{'Content-Type':'application/json'}, body:JSON.stringify({key})});
@@ -204,11 +210,14 @@ PAGE = """\
       await saveWakeup();
       await api('/api/wakeup/test', {method:'POST'});
     }
-    async function toggleParty(name) {
+    async function toggleParty(name, mode) {
+      // clicking the active mode turns it off; a different mode switches to it
+      const turnOn = !(partyActive && partyMode === mode);
       const r = await api('/api/party', {method:'POST',
         headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({on: !partyActive, device: name})});
+        body:JSON.stringify({on: turnOn, device: name, mode})});
       partyActive = r.active;
+      partyMode = r.mode;
       if (partyActive) selected[name] = null;
       refresh();
     }
@@ -330,7 +339,7 @@ def wakeup_test():
 
 @app.get("/api/party")
 def party_get():
-    return jsonify({"active": party.is_active()})
+    return jsonify({"active": party.is_active(), "mode": party.active_mode()})
 
 
 @app.post("/api/party")
@@ -338,10 +347,10 @@ def party_set():
     body = request.json or {}
     if body.get("on"):
         device = body.get("device") or wakeup.load().get("device", "ceiling")
-        party.start(device)
+        party.start(device, body.get("mode", "smooth"))
     else:
         party.stop()
-    return jsonify({"active": party.is_active()})
+    return jsonify({"active": party.is_active(), "mode": party.active_mode()})
 
 
 @app.post("/api/<name>/profile")
