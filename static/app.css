@@ -1,0 +1,8 @@
+body { background:#15171c; }
+.container { max-width: 960px; }
+input[type=range] { accent-color:#5b8cff; }
+input[type=color] { width:46px; height:38px; padding:0; }
+.swatches { display:flex; gap:.35rem; flex-wrap:wrap; }
+.sw { width:30px; height:30px; border-radius:6px; border:1px solid #00000040;
+      padding:0; cursor:pointer; }
+.day { min-width:42px; }
