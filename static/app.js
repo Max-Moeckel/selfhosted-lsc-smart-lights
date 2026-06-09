@@ -94,6 +94,10 @@ async function refresh() {
   const [data, party] = await Promise.all([api('/api/status'), api('/api/party')]);
   partyActive = party.active;
   partyMode = party.mode;
+  // reflect the real active mode (e.g. after reopening the page), unless party runs
+  if (!partyActive) {
+    for (const [n, s] of Object.entries(data)) selected[n] = s.profile || null;
+  }
   statusByName = data;
   renderCards();
 }

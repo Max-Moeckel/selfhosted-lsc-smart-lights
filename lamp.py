@@ -116,6 +116,36 @@ PROFILES = {
 }
 
 
+def match_profile(status: dict) -> str | None:
+    """Which named profile the current device state matches, or None.
+
+    Lets a freshly loaded UI show the active mode without client-side memory.
+    Values are compared with a small tolerance to absorb DPS rounding.
+    """
+    if not status or not status.get("online") or not status.get("on"):
+        return None
+
+    def close(a, b, tol=3):
+        return a is not None and abs(a - b) <= tol
+
+    mode = status.get("mode")
+    bright = status.get("bright")
+    colour = status.get("colour")
+    for key, p in PROFILES.items():
+        if "colour" in p:
+            # colour scene (Nacht = red): colour mode, red-ish hue, dim
+            if mode == "colour" and colour and close(bright, p["bright"]):
+                try:
+                    r = int(colour[1:3], 16); g = int(colour[3:5], 16); b = int(colour[5:7], 16)
+                except (ValueError, IndexError):
+                    continue
+                if r > 0 and g == 0 and b == 0:
+                    return key
+        elif mode == "white" and close(status.get("temp"), p["temp"]) and close(bright, p["bright"]):
+            return key
+    return None
+
+
 def apply_profile(dev: tinytuya.BulbDevice, key: str):
     p = PROFILES[key]
     dev.turn_on()

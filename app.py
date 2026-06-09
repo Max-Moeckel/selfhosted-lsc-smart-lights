@@ -42,7 +42,9 @@ def status():
     out = {}
     for name, dcfg in cfg.items():
         dev = lamp.make_device(dcfg)
-        out[name] = lamp.parse_status(lamp.get_dps(dev))
+        st = lamp.parse_status(lamp.get_dps(dev))
+        st["profile"] = lamp.match_profile(st)
+        out[name] = st
     return jsonify(out)
 
 
