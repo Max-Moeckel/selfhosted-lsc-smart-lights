@@ -1,9 +1,10 @@
 """Party mode: rapidly cycle the colour ceiling light through the hue wheel.
 
 Runs as a background thread so the web UI can toggle it on/off. Only the
-colour-capable device is driven (the CCT bulb has no hue). A music-sync hook
-is sketched at the bottom — see `_next_colour` for where beat/intensity input
-would steer hue and brightness instead of the free-running cycle.
+colour-capable device is driven (the CCT bulb has no hue). The "music" mode is
+a server-timed metronome pulsing the lamp on every beat at the current BPM. The
+BPM is set either manually or from the browser's live mic tempo detection, which
+POSTs the detected BPM; the server keeps that tempo until a new one is reported.
 """
 
 import random
@@ -20,10 +21,16 @@ HUE_STEP = 18          # degrees per tick → full wheel in 20 ticks (~5 s)
 # Strobe is harsher: shorter ticks and sudden jumps to random saturated hues
 # with brightness flicking between near-off and full for a punchy effect.
 STROBE_INTERVAL = 0.12
+# Music: each beat jumps a chunk around the wheel and alternates brightness so
+# the hit is clearly visible. The lamp can't strobe per-audio-sample over LAN,
+# so we react at beat granularity (max ~ a few Hz).
+BEAT_HUE_STEP = 67
 
 _running = threading.Event()
 _thread = None
 _mode = "smooth"
+_bpm = 0                     # >0 = server-timed tempo; 0 = external (mic) beats
+_beat = threading.Event()    # set per beat (mic trigger) or to wake the tempo loop
 
 
 def _hsv_hex(h: int, s: int, v: int) -> str:
@@ -49,6 +56,56 @@ def _strobe_step(state: dict) -> tuple[int, int, int]:
     if state["flash"]:
         return random.randint(0, 359), 1000, 1000
     return state.get("hue", 0), 1000, 30
+
+
+def _emit_beat(dev, state: dict):
+    """One visible pulse: advance the hue and alternate brightness for a hit."""
+    state["hue"] = (state.get("hue", 0) + BEAT_HUE_STEP) % 360
+    state["flash"] = not state.get("flash", False)
+    v = 1000 if state["flash"] else 650
+    try:
+        dev.set_value(24, _hsv_hex(state["hue"], 1000, v))
+    except Exception:
+        pass
+
+
+def _music_loop(device: str):
+    try:
+        cfg = lamp.load_config()
+        if device not in cfg:
+            return
+        dev = lamp.make_device(cfg[device])
+        try:
+            dev.turn_on()
+            dev.set_value(21, "colour")
+        except Exception:
+            pass
+        state = {}
+        while _running.is_set():
+            bpm = _bpm
+            if bpm > 0:
+                # server-timed metronome; wait acts as an interruptible sleep so a
+                # tempo change (set_bpm sets _beat) re-reads bpm on the next loop
+                _emit_beat(dev, state)
+                _beat.wait(timeout=max(0.05, 60.0 / bpm))
+                _beat.clear()
+            else:
+                # no tempo reported yet (mic still warming up): hold until set_bpm wakes us
+                _beat.wait(timeout=0.5)
+                _beat.clear()
+    finally:
+        _running.clear()
+
+
+def set_bpm(bpm: int):
+    """Set the server-timed tempo (0 = follow external mic beats)."""
+    global _bpm
+    _bpm = max(0, min(300, int(bpm)))
+    _beat.set()  # wake the loop so the new tempo takes effect at once
+
+
+def current_bpm() -> int:
+    return _bpm if _running.is_set() and _mode == "music" else 0
 
 
 def _loop(device: str, mode: str):
@@ -77,28 +134,38 @@ def _loop(device: str, mode: str):
         _running.clear()
 
 
-def start(device: str = "ceiling", mode: str = "smooth") -> bool:
-    """Begin cycling in the given mode ("smooth" or "strobe").
+def start(device: str = "ceiling", mode: str = "smooth", bpm: int = 0) -> bool:
+    """Begin cycling in the given mode ("smooth", "strobe" or "music").
 
     Returns False if already running in the same mode. If a different mode is
     requested while running, the current loop is stopped and the new one starts.
+    For "music", re-calling while already in music mode just updates the tempo
+    (no restart), so the browser's mic stream isn't interrupted.
     """
-    global _thread, _mode
+    global _thread, _mode, _bpm
     if _running.is_set():
         if mode == _mode:
+            if mode == "music":
+                set_bpm(bpm)
             return False
         stop()
         if _thread is not None:
             _thread.join(timeout=1)
     _mode = mode
+    _bpm = max(0, min(300, int(bpm))) if mode == "music" else 0
+    _beat.clear()
     _running.set()
-    _thread = threading.Thread(target=_loop, args=(device, mode), daemon=True)
+    if mode == "music":
+        _thread = threading.Thread(target=_music_loop, args=(device,), daemon=True)
+    else:
+        _thread = threading.Thread(target=_loop, args=(device, mode), daemon=True)
     _thread.start()
     return True
 
 
 def stop():
     _running.clear()
+    _beat.set()  # wake the music loop out of its wait so it exits promptly
 
 
 def is_active() -> bool:

@@ -33,6 +33,11 @@ BRIGHT_STEPS = 1000
 # low brightness the mode luminance gap is imperceptible, then the long white
 # phase does all the real brightening up to Arbeiten max.
 SWITCH = 0.15
+# Lowest *visible* level (out of 1000). These bulbs emit no perceptible light
+# below ~3-4%, so starting the ramp at the raw minimum (~1%) looks like the lamp
+# never turned on — especially when it was switched fully off beforehand. We floor
+# the ramp here so the sunrise visibly begins, then climbs along the gamma curve.
+FLOOR = 40
 
 
 def _hsv_hex(h: int, s: int, v: int) -> str:
@@ -97,7 +102,7 @@ def run_sunrise(device: str, duration_min: float):
                 la = frac / SWITCH
                 h = round(35 * la)
                 s = round(1000 - 900 * la)        # → ~100, nearly white at the handoff
-                v = round(10 + 990 * bright)
+                v = round(FLOOR + (1000 - FLOOR) * bright)
                 hexval = _hsv_hex(h, s, v)
                 if hexval != last_hex:
                     try:
@@ -115,7 +120,7 @@ def run_sunrise(device: str, duration_min: float):
                         pass
                     white_set = True
                 lb = (frac - SWITCH) / (1 - SWITCH)
-                braw = max(10, round(10 + 990 * bright))
+                braw = round(FLOOR + (1000 - FLOOR) * bright)
                 traw = round(lb * 1000)
                 if traw != last_traw:
                     try:

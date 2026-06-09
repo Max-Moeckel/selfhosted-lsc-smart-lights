@@ -130,7 +130,8 @@ def wakeup_test():
 
 @app.get("/api/party")
 def party_get():
-    return jsonify({"active": party.is_active(), "mode": party.active_mode()})
+    return jsonify({"active": party.is_active(), "mode": party.active_mode(),
+                    "bpm": party.current_bpm()})
 
 
 @app.post("/api/party")
@@ -139,10 +140,11 @@ def party_set():
     if body.get("on"):
         wakeup.cancel()
         device = body.get("device") or wakeup.load().get("device", "ceiling")
-        party.start(device, body.get("mode", "smooth"))
+        party.start(device, body.get("mode", "smooth"), int(body.get("bpm", 0) or 0))
     else:
         party.stop()
-    return jsonify({"active": party.is_active(), "mode": party.active_mode()})
+    return jsonify({"active": party.is_active(), "mode": party.active_mode(),
+                    "bpm": party.current_bpm()})
 
 
 @app.post("/api/<name>/profile")
