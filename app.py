@@ -40,12 +40,15 @@ PAGE = """\
     .swatches { display:flex; gap:.35rem; flex-wrap:wrap; }
     .sw { width:26px; height:26px; border-radius:6px; border:1px solid #00000040;
           padding:0; cursor:pointer; }
+    .profiles { display:flex; gap:.4rem; flex-wrap:wrap; margin-top:.7rem; }
+    .prof { font-size:.82rem; padding:.4rem .7rem; }
   </style>
 </head>
 <body>
   <h1>Lichtsteuerung</h1>
   <div id="lamps"></div>
   <script>
+    let PROFILES = {};
     async function api(path, opts) {
       const r = await fetch(path, opts);
       return r.json();
@@ -65,6 +68,10 @@ PAGE = """\
           <button class="power" onclick="power('${name}', ${s.on ? 'false':'true'})">
             ${s.on ? 'Aus' : 'An'}
           </button>
+        </div>
+        <div class="profiles ${dim}">
+          ${Object.entries(PROFILES).map(([k, lbl]) =>
+            `<button class="prof" onclick="profile('${name}','${k}')">${lbl}</button>`).join('')}
         </div>
         <div class="${dim}">
           <label>Helligkeit: <span id="bl-${name}">${s.bright ?? '-'}</span>%</label>
@@ -107,8 +114,16 @@ PAGE = """\
       await api(`/api/${name}/colour`, {method:'POST',
         headers:{'Content-Type':'application/json'}, body:JSON.stringify({hex})});
     }
-    refresh();
-    setInterval(refresh, 10000);
+    async function profile(name, key) {
+      await api(`/api/${name}/profile`, {method:'POST',
+        headers:{'Content-Type':'application/json'}, body:JSON.stringify({key})});
+      refresh();
+    }
+    (async () => {
+      PROFILES = await api('/api/profiles');
+      refresh();
+      setInterval(refresh, 10000);
+    })();
   </script>
 </body>
 </html>
@@ -125,6 +140,11 @@ def _device(name):
 @app.get("/")
 def index():
     return render_template_string(PAGE)
+
+
+@app.get("/api/profiles")
+def profiles():
+    return jsonify({k: v["label"] for k, v in lamp.PROFILES.items()})
 
 
 @app.get("/api/status")
@@ -186,6 +206,21 @@ def colour(name):
     try:
         r, g, b = (int(hexval[i:i + 2], 16) for i in (0, 2, 4))
         lamp.set_colour(dev, r, g, b)
+        return jsonify({"ok": True})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 502
+
+
+@app.post("/api/<name>/profile")
+def profile(name):
+    _, dev = _device(name)
+    if dev is None:
+        return jsonify({"error": "unknown device"}), 404
+    key = request.json.get("key")
+    if key not in lamp.PROFILES:
+        return jsonify({"error": "unknown profile"}), 400
+    try:
+        lamp.apply_profile(dev, key)
         return jsonify({"ok": True})
     except Exception as e:
         return jsonify({"error": str(e)}), 502

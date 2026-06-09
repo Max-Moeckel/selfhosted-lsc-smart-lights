@@ -98,3 +98,20 @@ def set_temp(dev: tinytuya.BulbDevice, pct: int):
 
 def set_colour(dev: tinytuya.BulbDevice, r: int, g: int, b: int):
     dev.set_colour(r, g, b)
+
+
+# Named white-light profiles (temp 0=warm … 100=cool, bright 0–100), like the app scenes.
+PROFILES = {
+    "working": {"label": "Arbeiten", "temp": 100, "bright": 100},
+    "reading": {"label": "Lesen", "temp": 65, "bright": 90},
+    "relax":   {"label": "Entspannen", "temp": 15, "bright": 55},
+    "night":   {"label": "Nacht", "temp": 0, "bright": 8},
+}
+
+
+def apply_profile(dev: tinytuya.BulbDevice, key: str):
+    p = PROFILES[key]
+    dev.turn_on()
+    dev.set_mode("white")
+    dev.set_value(23, round(p["temp"] * 10))
+    dev.set_value(22, max(10, round(p["bright"] / 100 * 990 + 10)))
