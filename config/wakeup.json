@@ -1,6 +1,6 @@
 {
-  "enabled": true,
-  "time": "03:25",
+  "enabled": false,
+  "time": "10:00",
   "duration_min": 10,
   "device": "ceiling",
   "days": [
