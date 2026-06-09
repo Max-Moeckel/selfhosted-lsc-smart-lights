@@ -21,7 +21,11 @@ DEFAULT = {
 }
 
 _running = threading.Event()
-STEP_SECONDS = 15
+# Brightness raw range is 10–1000 (990 steps). We pace the ramp so each tick
+# nudges brightness by ~1 raw unit → imperceptible. MIN_INTERVAL keeps short
+# test ramps from flooding the device with LAN calls.
+MIN_INTERVAL = 0.5
+BRIGHT_STEPS = 990
 
 # Sunrise colour gradient (dim red → red → orange → amber), positions 0..1.
 SUNRISE_PALETTE = [
@@ -82,17 +86,21 @@ def run_sunrise(device: str, duration_min: int, end_temp: int):
         except Exception:
             supports_colour = False
 
-        step = max(1.0, min(STEP_SECONDS, total / 20))
+        step = max(MIN_INTERVAL, total / BRIGHT_STEPS)
         white_set = False
+        last_braw = last_traw = None
+        last_colour = None
         start = time.time()
         while True:
             frac = min(1.0, (time.time() - start) / total)
             if supports_colour and frac < COLOUR_PHASE:
-                r, g, b = _palette(frac / COLOUR_PHASE)
-                try:
-                    dev.set_colour(r, g, b)
-                except Exception:
-                    pass
+                rgb = _palette(frac / COLOUR_PHASE)
+                if rgb != last_colour:
+                    try:
+                        dev.set_colour(*rgb)
+                    except Exception:
+                        pass
+                    last_colour = rgb
             else:
                 if not white_set:
                     try:
@@ -102,16 +110,23 @@ def run_sunrise(device: str, duration_min: int, end_temp: int):
                     white_set = True
                 if supports_colour:
                     local = (frac - COLOUR_PHASE) / (1 - COLOUR_PHASE)
-                    bright = round((0.7 + 0.3 * local) * 100)
-                    temp = round(local * end_temp)
+                    braw = max(10, round((0.7 + 0.3 * local) * 990 + 10))
+                    traw = round(local * end_temp * 10)
                 else:
-                    bright = max(1, round(frac * 100))
-                    temp = round(frac * end_temp)
-                try:
-                    dev.set_value(23, temp * 10)
-                    dev.set_value(22, max(10, round(bright / 100 * 990 + 10)))
-                except Exception:
-                    pass
+                    braw = max(10, round(frac * 990 + 10))
+                    traw = round(frac * end_temp * 10)
+                if traw != last_traw:
+                    try:
+                        dev.set_value(23, traw)
+                    except Exception:
+                        pass
+                    last_traw = traw
+                if braw != last_braw:
+                    try:
+                        dev.set_value(22, braw)
+                    except Exception:
+                        pass
+                    last_braw = braw
             if frac >= 1.0:
                 break
             time.sleep(step)
