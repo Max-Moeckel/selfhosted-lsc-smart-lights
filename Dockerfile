@@ -5,7 +5,7 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY lamp.py app.py wakeup.py ./
+COPY lamp.py app.py wakeup.py party.py ./
 
 EXPOSE 8080
 
