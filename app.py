@@ -79,15 +79,10 @@ PAGE = """\
       <button onclick="testWakeup()">30-Sek-Test</button>
     </div>
   </div>
-  <div class="card" id="party">
-    <div class="row">
-      <span class="name">Party-Modus</span>
-      <button id="party-btn" class="power" onclick="toggleParty()">An</button>
-    </div>
-  </div>
   <div id="lamps"></div>
   <script>
     let PROFILES = {};
+    let partyActive = false;
     async function api(path, opts) {
       const r = await fetch(path, opts);
       return r.json();
@@ -111,6 +106,9 @@ PAGE = """\
         <div class="profiles ${dim}">
           ${Object.entries(PROFILES).map(([k, lbl]) =>
             `<button class="prof" onclick="profile('${name}','${k}')">${lbl}</button>`).join('')}
+          ${s.supports_colour ? `<button class="prof" onclick="toggleParty('${name}')"
+            style="${partyActive ? 'background:#7d2e6b;border-color:#9c3a86;color:#ffd9f4' : ''}">
+            ${partyActive ? 'Party aus' : 'Party'}</button>` : ''}
         </div>
         <div class="${dim}">
           <label>Helligkeit: <span id="bl-${name}">${s.bright ?? '-'}</span>%</label>
@@ -136,7 +134,8 @@ PAGE = """\
       </div>`;
     }
     async function refresh() {
-      const data = await api('/api/status');
+      const [data, party] = await Promise.all([api('/api/status'), api('/api/party')]);
+      partyActive = party.active;
       document.getElementById('lamps').innerHTML =
         Object.entries(data).map(([n, s]) => card(n, s)).join('');
     }
@@ -195,22 +194,17 @@ PAGE = """\
       await saveWakeup();
       await api('/api/wakeup/test', {method:'POST'});
     }
-    function renderParty(active) {
-      const btn = document.getElementById('party-btn');
-      btn.textContent = active ? 'Aus' : 'An';
-      btn.style.background = active ? '#7d2e6b' : '';
-    }
-    async function toggleParty() {
-      const cur = document.getElementById('party-btn').textContent === 'Aus';
+    async function toggleParty(name) {
       const r = await api('/api/party', {method:'POST',
-        headers:{'Content-Type':'application/json'}, body:JSON.stringify({on: !cur})});
-      renderParty(r.active);
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({on: !partyActive, device: name})});
+      partyActive = r.active;
+      refresh();
     }
     (async () => {
       PROFILES = await api('/api/profiles');
       const st = await api('/api/status');
       await loadWakeup(Object.keys(st));
-      renderParty((await api('/api/party')).active);
       refresh();
       setInterval(refresh, 10000);
     })();
@@ -330,9 +324,10 @@ def party_get():
 
 @app.post("/api/party")
 def party_set():
-    cfg = wakeup.load()
-    if request.json.get("on"):
-        party.start(cfg.get("device", "ceiling"))
+    body = request.json or {}
+    if body.get("on"):
+        device = body.get("device") or wakeup.load().get("device", "ceiling")
+        party.start(device)
     else:
         party.stop()
     return jsonify({"active": party.is_active()})
@@ -354,4 +349,4 @@ def profile(name):
 
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=8080)
+    app.run(host="0.0.0.0", port=8081)
