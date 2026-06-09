@@ -133,8 +133,9 @@ def match_profile(status: dict) -> str | None:
     colour = status.get("colour")
     for key, p in PROFILES.items():
         if "colour" in p:
-            # colour scene (Nacht = red): colour mode, red-ish hue, dim
-            if mode == "colour" and colour and close(bright, p["bright"]):
+            # colour scene (Nacht = red): colour mode + red-ish hue. Brightness is
+            # not compared — the colour scene doesn't pin a brightness on the device.
+            if mode == "colour" and colour:
                 try:
                     r = int(colour[1:3], 16); g = int(colour[3:5], 16); b = int(colour[5:7], 16)
                 except (ValueError, IndexError):
