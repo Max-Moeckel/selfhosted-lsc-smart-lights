@@ -108,6 +108,34 @@ smart-light/
 
 ---
 
+## Webapp (Docker / Synology)
+
+Eine simple Weboberfläche (`app.py`, Flask) steuert beide Lampen — An/Aus, Helligkeit, Farbtemperatur, mit Live-Status.
+
+### Lokal testen
+
+```bash
+source .venv/bin/activate
+pip install -r requirements.txt
+python app.py          # http://localhost:8080
+```
+
+### Auf Synology deployen
+
+1. Projektordner auf die NAS kopieren (z.B. `/volume1/docker/smart-light/`), inkl. `config/devices.json`
+2. In **Container Manager** ein Projekt aus der `docker-compose.yml` anlegen — oder per SSH:
+
+```bash
+cd /volume1/docker/smart-light
+docker compose up -d --build
+```
+
+3. Aufrufen unter `http://<synology-ip>:8080`
+
+Die `config/devices.json` mit den Local Keys wird **read-only als Volume gemountet** und landet nie im Image. Die Lampen-IPs müssen aus dem Netz der Synology erreichbar sein (gleiches LAN/VLAN).
+
+---
+
 ## Sicherheitshinweis
 
 `config/devices.json` enthält die **Local Keys** der Geräte und steht in `.gitignore`.  

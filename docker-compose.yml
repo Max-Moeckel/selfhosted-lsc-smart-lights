@@ -1,0 +1,11 @@
+services:
+  lsc-web:
+    build: .
+    image: lsc-web:latest
+    container_name: lsc-web
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    volumes:
+      # Local keys stay on the host, mounted read-only — never baked into the image
+      - ./config/devices.json:/app/config/devices.json:ro
