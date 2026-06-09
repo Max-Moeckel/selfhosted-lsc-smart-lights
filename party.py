@@ -31,6 +31,13 @@ _thread = None
 _mode = "smooth"
 _bpm = 0                     # >0 = server-timed tempo; 0 = external (mic) beats
 _beat = threading.Event()    # set per beat (mic trigger) or to wake the tempo loop
+# Live mic-derived colour, reported ~5 Hz by the browser: hue from the spectral
+# centroid, V (brightness) from the band intensity. The metronome consumes these
+# on each beat; a stale timestamp (>1 s) means no mic, so we fall back to the
+# free-advancing rainbow.
+_sync_hue = 0
+_sync_v = 1000
+_sync_ts = 0.0
 
 
 def _hsv_hex(h: int, s: int, v: int) -> str:
@@ -59,12 +66,19 @@ def _strobe_step(state: dict) -> tuple[int, int, int]:
 
 
 def _emit_beat(dev, state: dict):
-    """One visible pulse: advance the hue and alternate brightness for a hit."""
-    state["hue"] = (state.get("hue", 0) + BEAT_HUE_STEP) % 360
+    """One visible pulse. With live mic sync, hue follows the spectral centroid and
+    the pulse brightness follows the reported band intensity; without it, fall back
+    to a free-advancing hue at full brightness. Either way the on/off-beat brightness
+    alternates so the hit stays visible."""
+    if time.time() - _sync_ts < 1.0:
+        h, v_base = _sync_hue, _sync_v
+    else:
+        state["hue"] = (state.get("hue", 0) + BEAT_HUE_STEP) % 360
+        h, v_base = state["hue"], 1000
     state["flash"] = not state.get("flash", False)
-    v = 1000 if state["flash"] else 650
+    v = v_base if state["flash"] else round(v_base * 0.65)
     try:
-        dev.set_value(24, _hsv_hex(state["hue"], 1000, v))
+        dev.set_value(24, _hsv_hex(h, 1000, v))
     except Exception:
         pass
 
@@ -102,6 +116,15 @@ def set_bpm(bpm: int):
     global _bpm
     _bpm = max(0, min(300, int(bpm)))
     _beat.set()  # wake the loop so the new tempo takes effect at once
+
+
+def set_sync(hue: int, v: int):
+    """Store the latest mic-derived colour (hue 0–360) and brightness (V 0–1000).
+    Reported continuously by the browser; the metronome's _emit_beat reads them."""
+    global _sync_hue, _sync_v, _sync_ts
+    _sync_hue = int(hue) % 360
+    _sync_v = max(0, min(1000, int(v)))
+    _sync_ts = time.time()
 
 
 def current_bpm() -> int:

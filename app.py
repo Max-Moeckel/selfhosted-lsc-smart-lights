@@ -147,6 +147,15 @@ def party_set():
                     "bpm": party.current_bpm()})
 
 
+@app.post("/api/party/sync")
+def party_sync():
+    # high-rate (~5 Hz) live colour feed from the browser's mic analysis;
+    # consumed by the party metronome, so keep it cheap
+    body = request.json or {}
+    party.set_sync(int(body.get("hue", 0)), int(body.get("v", 1000)))
+    return jsonify({"ok": True})
+
+
 @app.post("/api/<name>/profile")
 def profile(name):
     _, dev = _device(name)
