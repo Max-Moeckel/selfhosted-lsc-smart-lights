@@ -120,6 +120,16 @@ pip install -r requirements.txt
 python app.py          # http://localhost:8080
 ```
 
+### Wake-up Light (Sonnenaufgang)
+
+Oben in der Weboberfläche: zu einer eingestellten **Startzeit** fährt die gewählte Lampe
+über **10–60 Minuten** Helligkeit (1 → 100 %) und Farbtemperatur (warm → neutral) hoch.
+Wochentage wählbar, „2-min-Test" für eine schnelle Vorschau.
+
+Die Einstellungen liegen in `config/wakeup.json` (kommitierbar, keine Secrets) und werden
+über die Oberfläche gespeichert. Der Scheduler läuft als Hintergrund-Thread im Container —
+deshalb startet gunicorn bewusst mit **einem** Worker, damit der Wecker nicht doppelt feuert.
+
 ### Auf Synology deployen
 
 1. Projektordner auf die NAS kopieren (z.B. `/volume1/docker/smart-light/`), inkl. `config/devices.json`

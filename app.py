@@ -1,10 +1,14 @@
 """Simple web UI to control LSC smart lights over LAN. Deployable via Docker."""
 
+import threading
+
 from flask import Flask, jsonify, request, render_template_string
 
 import lamp
+import wakeup
 
 app = Flask(__name__)
+wakeup.start()
 
 PAGE = """\
 <!doctype html>
@@ -42,10 +46,38 @@ PAGE = """\
           padding:0; cursor:pointer; }
     .profiles { display:flex; gap:.4rem; flex-wrap:wrap; margin-top:.7rem; }
     .prof { font-size:.82rem; padding:.4rem .7rem; }
+    .wu-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(120px,1fr));
+               gap:.6rem 1rem; margin-top:.5rem; }
+    .wu-grid input, .wu-grid select { width:100%; box-sizing:border-box;
+       background:#15171c; color:#e8e8e8; border:1px solid #3a3d44;
+       border-radius:8px; padding:.4rem; }
+    .switch { font-size:.85rem; color:#9aa0ac; display:flex; align-items:center; gap:.4rem; }
+    .days { display:flex; gap:.35rem; flex-wrap:wrap; margin-top:.3rem; }
+    .day { width:38px; padding:.35rem 0; text-align:center; font-size:.8rem; }
+    .day.on { background:#2e4d7d; border-color:#3f63a0; color:#dbe6ff; }
   </style>
 </head>
 <body>
   <h1>Lichtsteuerung</h1>
+  <div class="card" id="wakeup">
+    <div class="row">
+      <span class="name">Wake-up Light</span>
+      <label class="switch"><input type="checkbox" id="wu-enabled"> aktiv</label>
+    </div>
+    <div class="wu-grid">
+      <div><label>Startzeit</label><input type="time" id="wu-time"></div>
+      <div><label>Dauer: <span id="wu-durl">30</span> min</label>
+        <input type="range" id="wu-dur" min="10" max="60" step="5" value="30"
+          oninput="document.getElementById('wu-durl').textContent=this.value"></div>
+      <div><label>Lampe</label><select id="wu-device"></select></div>
+    </div>
+    <label>Wochentage</label>
+    <div class="days" id="wu-days"></div>
+    <div class="row" style="margin-top:.9rem">
+      <button onclick="saveWakeup()">Speichern</button>
+      <button onclick="testWakeup()">2-min-Test</button>
+    </div>
+  </div>
   <div id="lamps"></div>
   <script>
     let PROFILES = {};
@@ -119,8 +151,47 @@ PAGE = """\
         headers:{'Content-Type':'application/json'}, body:JSON.stringify({key})});
       refresh();
     }
+    const DAYNAMES = ['Mo','Di','Mi','Do','Fr','Sa','So'];
+    let wuDays = [];
+    function renderDays() {
+      document.getElementById('wu-days').innerHTML = DAYNAMES.map((d,i) =>
+        `<button class="day ${wuDays.includes(i)?'on':''}" onclick="toggleDay(${i})">${d}</button>`
+      ).join('');
+    }
+    function toggleDay(i) {
+      wuDays = wuDays.includes(i) ? wuDays.filter(x=>x!==i) : [...wuDays, i].sort();
+      renderDays();
+    }
+    async function loadWakeup(deviceNames) {
+      const w = await api('/api/wakeup');
+      document.getElementById('wu-enabled').checked = w.enabled;
+      document.getElementById('wu-time').value = w.time;
+      document.getElementById('wu-dur').value = w.duration_min;
+      document.getElementById('wu-durl').textContent = w.duration_min;
+      document.getElementById('wu-device').innerHTML =
+        deviceNames.map(n => `<option ${n===w.device?'selected':''}>${n}</option>`).join('');
+      wuDays = w.days || [];
+      renderDays();
+    }
+    async function saveWakeup() {
+      await api('/api/wakeup', {method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({
+          enabled: document.getElementById('wu-enabled').checked,
+          time: document.getElementById('wu-time').value,
+          duration_min: +document.getElementById('wu-dur').value,
+          device: document.getElementById('wu-device').value,
+          days: wuDays,
+        })});
+      alert('Wake-up gespeichert');
+    }
+    async function testWakeup() {
+      await saveWakeup();
+      await api('/api/wakeup/test', {method:'POST'});
+    }
     (async () => {
       PROFILES = await api('/api/profiles');
+      const st = await api('/api/status');
+      await loadWakeup(Object.keys(st));
       refresh();
       setInterval(refresh, 10000);
     })();
@@ -209,6 +280,28 @@ def colour(name):
         return jsonify({"ok": True})
     except Exception as e:
         return jsonify({"error": str(e)}), 502
+
+
+@app.get("/api/wakeup")
+def wakeup_get():
+    return jsonify(wakeup.load())
+
+
+@app.post("/api/wakeup")
+def wakeup_set():
+    return jsonify(wakeup.save(request.json or {}))
+
+
+@app.post("/api/wakeup/test")
+def wakeup_test():
+    cfg = wakeup.load()
+    # short 2-minute preview so you don't wait the full duration
+    threading.Thread(
+        target=wakeup.run_sunrise,
+        args=(cfg["device"], 2, cfg["end_temp"]),
+        daemon=True,
+    ).start()
+    return jsonify({"ok": True})
 
 
 @app.post("/api/<name>/profile")
