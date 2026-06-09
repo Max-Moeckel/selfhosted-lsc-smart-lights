@@ -2,6 +2,8 @@ let PROFILES = {};
 let partyActive = false;
 let partyMode = null;  // "smooth" | "strobe" | null
 let selected = {};  // device name -> currently chosen profile key
+let deviceNames = [];
+let statusByName = {};  // last known status per device, for instant re-renders
 
 async function api(path, opts) {
   const r = await fetch(path, opts);
@@ -76,20 +78,29 @@ function card(name, s) {
   </div>`;
 }
 
-function renderPending(names) {
+// Render from cached status (no network) so optimistic UI changes show instantly.
+function renderCards() {
+  const names = deviceNames.length ? deviceNames : Object.keys(statusByName);
   document.getElementById('lamps').innerHTML =
-    names.map(n => card(n, pendingStatus())).join('');
+    names.map(n => card(n, statusByName[n] || pendingStatus())).join('');
+}
+
+function renderPending(names) {
+  deviceNames = names;
+  renderCards();
 }
 
 async function refresh() {
   const [data, party] = await Promise.all([api('/api/status'), api('/api/party')]);
   partyActive = party.active;
   partyMode = party.mode;
-  document.getElementById('lamps').innerHTML =
-    Object.entries(data).map(([n, s]) => card(n, s)).join('');
+  statusByName = data;
+  renderCards();
 }
 
 async function power(name, on) {
+  if (statusByName[name]) statusByName[name].on = on;  // optimistic
+  renderCards();
   await api(`/api/${name}/power`, {method:'POST',
     headers:{'Content-Type':'application/json'}, body:JSON.stringify({on})});
   refresh();
@@ -97,27 +108,31 @@ async function power(name, on) {
 
 async function setv(name, kind, val) {
   selected[name] = null;
+  if (statusByName[name]) statusByName[name][kind] = +val;
   await api(`/api/${name}/${kind}`, {method:'POST',
     headers:{'Content-Type':'application/json'}, body:JSON.stringify({value:+val})});
 }
 
 async function setcolour(name, hex) {
   selected[name] = null;
+  if (statusByName[name]) statusByName[name].colour = hex;
   await api(`/api/${name}/colour`, {method:'POST',
     headers:{'Content-Type':'application/json'}, body:JSON.stringify({hex})});
 }
 
 async function profile(name, key) {
-  if (partyActive) {
+  const wasParty = partyActive;
+  selected[name] = key;            // optimistic: highlight immediately
+  partyActive = false;
+  partyMode = null;
+  renderCards();
+  if (wasParty) {
     await api('/api/party', {method:'POST',
       headers:{'Content-Type':'application/json'}, body:JSON.stringify({on:false})});
-    partyActive = false;
-    partyMode = null;
   }
   await api(`/api/${name}/profile`, {method:'POST',
     headers:{'Content-Type':'application/json'}, body:JSON.stringify({key})});
-  selected[name] = key;
-  refresh();
+  refresh();                       // reconcile with real state
 }
 
 const DAYNAMES = ['Mo','Di','Mi','Do','Fr','Sa','So'];
@@ -167,12 +182,16 @@ async function testWakeup() {
 async function toggleParty(name, mode) {
   // clicking the active mode turns it off; a different mode switches to it
   const turnOn = !(partyActive && partyMode === mode);
+  partyActive = turnOn;            // optimistic: colour the button immediately
+  partyMode = turnOn ? mode : null;
+  if (turnOn) selected[name] = null;
+  renderCards();
   const r = await api('/api/party', {method:'POST',
     headers:{'Content-Type':'application/json'},
     body:JSON.stringify({on: turnOn, device: name, mode})});
-  partyActive = r.active;
+  partyActive = r.active;          // reconcile with server truth
   partyMode = r.mode;
-  if (partyActive) selected[name] = null;
+  renderCards();
   refresh();
 }
 
