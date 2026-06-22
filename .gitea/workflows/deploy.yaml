@@ -25,6 +25,9 @@ jobs:
       # via docker-compose-prod.yml, so it survives the ephemeral workspace.
       - name: Build and deploy
         run: |
+          # .env is gitignored, so the fresh checkout has none — seed it from the
+          # template. docker compose auto-loads ./.env and fills ${LSC_CONFIG_DIR}.
+          cp .env.example .env
           docker compose -f docker-compose-prod.yml build
           docker compose -f docker-compose-prod.yml up -d --remove-orphans
           docker image prune -f
