@@ -1,0 +1,4 @@
+# UI regression tests (see tests/). Install with:
+#   pip install -r requirements-dev.txt && python -m playwright install chromium
+pytest
+pytest-playwright
