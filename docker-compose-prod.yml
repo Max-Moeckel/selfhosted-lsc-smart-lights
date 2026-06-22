@@ -12,12 +12,12 @@ services:
     image: lsc-web:latest
     container_name: lsc-web
     restart: unless-stopped
-    # Cap resources (applied by `docker compose up` on Compose v2).
-    deploy:
-      resources:
-        limits:
-          cpus: "1.0"
-          memory: 500M
+    # Cap resources. Pin to one core instead of a --cpus/CFS quota: the Synology
+    # kernel lacks CFS bandwidth control, so NanoCPUs is rejected ("NanoCPUs can not
+    # be set, as your kernel does not support CPU CFS scheduler"). cpuset=0 caps it
+    # at a single core; mem_limit caps RAM at 500 MiB.
+    cpuset: "0"
+    mem_limit: 500m
     # Mark the container healthy only while the app actually serves (slim image has
     # no curl/wget, so use Python's urllib — urlopen raises on a bad status/refusal).
     healthcheck:
