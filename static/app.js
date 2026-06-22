@@ -15,6 +15,12 @@ const BEAT_FRAC = 0.6;
 // bei höhenlastigen Songs; länger = ruhiger, näher an absoluter Zuordnung.
 let micSpreadSec = 30;
 let selected = {};  // device name -> currently chosen profile key
+// device -> {key, since}: a profile the user just clicked, pinned as the highlight
+// until the server's match_profile confirms that exact key. Without this, a status
+// push that catches the lamp mid-transition (match_profile briefly reporting another
+// or the previous profile) would yank the highlight off the button the user pressed.
+let pendingProfile = {};
+const PROFILE_CONFIRM_MS = 15000;  // give up waiting after this and trust the server
 let deviceNames = [];
 let statusByName = {};  // last known status per device, for instant re-renders
 
@@ -175,7 +181,21 @@ function applySnapshot(snap) {
   if (!micOn) partyBpm = party.bpm || 0;  // while the mic drives, the detected value wins
   // reflect the real active mode (e.g. after reopening the page), unless party runs
   if (!partyActive) {
-    for (const [n, s] of Object.entries(data)) selected[n] = s.profile || null;
+    for (const [n, s] of Object.entries(data)) {
+      const pend = pendingProfile[n];
+      if (pend) {
+        if (s.profile === pend.key) {                 // server reached our choice
+          delete pendingProfile[n];
+          selected[n] = s.profile;
+        } else if (Date.now() - pend.since > PROFILE_CONFIRM_MS) {
+          delete pendingProfile[n];                   // gave up → accept server truth
+          selected[n] = s.profile || null;
+        }
+        // else: still settling → keep the user's choice, ignore the transient match
+      } else {
+        selected[n] = s.profile || null;
+      }
+    }
   }
   statusByName = data;
   renderCards();
@@ -200,6 +220,7 @@ async function power(name, on) {
 
 async function setv(name, kind, val) {
   selected[name] = null;
+  delete pendingProfile[name];
   if (statusByName[name]) statusByName[name][kind] = +val;
   await api(`/api/${name}/${kind}`, {method:'POST',
     headers:{'Content-Type':'application/json'}, body:JSON.stringify({value:+val})});
@@ -207,6 +228,7 @@ async function setv(name, kind, val) {
 
 async function setcolour(name, hex) {
   selected[name] = null;
+  delete pendingProfile[name];
   if (statusByName[name]) statusByName[name].colour = hex;
   await api(`/api/${name}/colour`, {method:'POST',
     headers:{'Content-Type':'application/json'}, body:JSON.stringify({hex})});
@@ -215,6 +237,7 @@ async function setcolour(name, hex) {
 async function profile(name, key) {
   const wasParty = partyActive;
   selected[name] = key;            // optimistic: highlight immediately
+  pendingProfile[name] = {key, since: Date.now()};  // pin until the server confirms it
   partyActive = false;
   partyMode = null;
   micOn = false;
@@ -281,7 +304,7 @@ async function toggleParty(name, mode) {
   partyActive = turnOn;             // optimistic: colour the button immediately
   partyMode = turnOn ? mode : null;
   micOn = turnOn && isMic;
-  if (turnOn) { selected[name] = null; if (isMic) partyBpm = 0; }
+  if (turnOn) { selected[name] = null; delete pendingProfile[name]; if (isMic) partyBpm = 0; }
   stopMic();
   renderCards();
   const r = await api('/api/party', {method:'POST',
@@ -312,6 +335,7 @@ async function setBpm(name) {
   partyMode = 'music';
   micOn = false;
   selected[name] = null;
+  delete pendingProfile[name];
   stopMic();                        // manual tempo is server-timed, no mic needed
   renderCards();
   const r = await api('/api/party', {method:'POST',

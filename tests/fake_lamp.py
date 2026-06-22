@@ -25,6 +25,7 @@ class FakeBulb:
         self._power = power
         self._dps = dps if dps is not None else {"21": "white", "22": 510, "23": 500}
         self._reveal_power = False  # status() exposes DP 20 only right after updatedps()
+        self._stale = None          # when set, status() reports this old snapshot
 
     # tinytuya socket tuning — no-ops here
     def set_socketTimeout(self, *_):
@@ -39,12 +40,20 @@ class FakeBulb:
     def status(self):
         if not self.online:
             return {"Error": "offline"}
-        dps = dict(self._dps)
+        dps = dict(self._stale if self._stale is not None else self._dps)
         dps["41"] = True
         if self._reveal_power:           # one-shot, mirroring the device's stale cache
             dps["20"] = self._power
             self._reveal_power = False
         return {"dps": dps}
+
+    def freeze(self):
+        """Make status() keep reporting the current snapshot while set_value()s land
+        underneath — models the real light's stale status cache during a transition."""
+        self._stale = dict(self._dps)
+
+    def unfreeze(self):
+        self._stale = None
 
     def updatedps(self, index=None):
         self._reveal_power = True        # make the *next* status() include DP 20

@@ -89,6 +89,36 @@ def test_focused_button_click_updates_its_card(page, base_url, fake):
     expect(badge(page, "ceiling")).to_have_text("an")
 
 
+def test_profile_highlight_survives_stale_status(page, base_url, fake):
+    # The flicker bug: after picking a profile, a status push that catches the lamp
+    # mid-transition (the light's stale cache still reporting the *previous* profile)
+    # used to yank the blue highlight onto that other button until a later push set it
+    # back. The user's choice must stay pinned until the server confirms it.
+    import status
+
+    open_ui(page, base_url)
+    profile_btn(page, "ceiling", "Lesen").click()
+    expect(profile_btn(page, "ceiling", "Lesen")).to_have_class(re.compile(r"btn-primary"))
+
+    dev = fake.dev("ceiling")
+    dev.freeze()                                     # status() now keeps reporting "Lesen"
+    profile_btn(page, "ceiling", "Entspannen").click()
+
+    # piggyback a visible bulb change so we can tell the stale push was applied
+    fake.dev("bulb").online = True
+    fake.dev("bulb").turn_on()
+    status.poke()
+    expect(badge(page, "bulb")).to_have_text("an")   # the push (carrying stale ceiling) landed
+
+    # ...and the highlight stayed on the just-clicked Entspannen, not back on Lesen
+    expect(profile_btn(page, "ceiling", "Entspannen")).to_have_class(re.compile(r"btn-primary"))
+    expect(profile_btn(page, "ceiling", "Lesen")).not_to_have_class(re.compile(r"btn-primary"))
+
+    dev.unfreeze()                                   # lamp settles to relax
+    status.poke()
+    expect(profile_btn(page, "ceiling", "Entspannen")).to_have_class(re.compile(r"btn-primary"))
+
+
 def test_ceiling_card_not_rebuilt_when_only_bulb_changes(page, base_url, fake):
     # Per-card diff: a status push that only changes the bulb must not rebuild (and
     # so detach the buttons of) the unchanged ceiling card.
