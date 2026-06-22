@@ -7,6 +7,7 @@ need no hardware.
 """
 
 import sys
+import tempfile
 import threading
 import time
 import urllib.request
@@ -43,6 +44,8 @@ def base_url():
 
     import wakeup
     wakeup.start = lambda: None                      # no wake-up scheduler under test
+    # isolate the wake-up config so tests never read or clobber the real one
+    wakeup.WAKEUP_PATH = Path(tempfile.mkdtemp()) / "wakeup.json"
 
     from werkzeug.serving import make_server
 
