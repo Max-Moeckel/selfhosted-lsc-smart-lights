@@ -1,0 +1,21 @@
+# Keep runtime config and dev-only files out of the build context, so device local
+# keys are never sent to the daemon or baked into the image. config/ is provided at
+# runtime via a bind mount (see docker-compose.yml).
+config/
+tinytuya.json
+snapshot.json
+
+# Dev tooling / tests — not needed in the image
+.venv/
+tests/
+pytest.ini
+requirements-dev.txt
+.playwright-mcp/
+*.png
+
+# VCS and caches
+.git/
+.gitignore
+.dockerignore
+__pycache__/
+*.pyc

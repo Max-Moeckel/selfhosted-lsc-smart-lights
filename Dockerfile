@@ -9,6 +9,10 @@ COPY lamp.py app.py wakeup.py party.py status.py ./
 COPY templates/ ./templates/
 COPY static/ ./static/
 
+# config/ (device keys + wake-up settings) is NOT baked in — it is bind-mounted at
+# runtime (see docker-compose.yml). Create the mount point so the path always exists.
+RUN mkdir -p /app/config
+
 EXPOSE 8080
 
 # single worker: the wake-up scheduler and the SSE status poller run as background
