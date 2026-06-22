@@ -1,0 +1,44 @@
+name: deploy
+run-name: Deploy smart-light to Synology 💡
+
+# Build the image and (re)start the container whenever main changes.
+on:
+  push:
+    branches: [main]
+
+# Never let two deploys overlap; let a running one finish rather than cancel it.
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    container:
+      image: catthehacker/ubuntu:act-latest   # has docker CLI + compose; talks to the host daemon
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Build from this checkout (the build context is streamed to the host daemon)
+      # and recreate the container. Config is bind-mounted from an absolute host path
+      # via docker-compose-prod.yml, so it survives the ephemeral workspace.
+      - name: Build and deploy
+        run: |
+          docker compose -f docker-compose-prod.yml build
+          docker compose -f docker-compose-prod.yml up -d --remove-orphans
+          docker image prune -f
+
+      # Confirm the app actually serves before calling the deploy good.
+      - name: Smoke test
+        run: |
+          for i in $(seq 1 15); do
+            if docker exec lsc-web python -c \
+              "import urllib.request; urllib.request.urlopen('http://localhost:8080/', timeout=5)" 2>/dev/null; then
+              echo "app is up"; exit 0
+            fi
+            echo "waiting for app... ($i)"; sleep 2
+          done
+          echo "::error::app did not come up"
+          docker compose -f docker-compose-prod.yml logs --tail=80 || true
+          exit 1

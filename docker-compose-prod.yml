@@ -1,0 +1,19 @@
+# Production compose used by the Gitea CI deploy (.gitea/workflows/deploy.yaml).
+#
+# The runner builds inside an ephemeral checkout and talks to the host Docker daemon
+# over the mounted socket. Bind-mount sources are therefore resolved by the HOST, so
+# config must come from an ABSOLUTE host path — a workspace-relative ./config would
+# point at a path that doesn't exist on the host. Set LSC_CONFIG_DIR to the directory
+# on the NAS that holds the real devices/wakeup/settings json (default below).
+services:
+  lsc-web:
+    build: .
+    image: lsc-web:latest
+    container_name: lsc-web
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    volumes:
+      - ${LSC_CONFIG_DIR:-/volume2/dockerSSD/smart-lamps/config}/devices.json:/app/config/devices.json:ro
+      - ${LSC_CONFIG_DIR:-/volume2/dockerSSD/smart-lamps/config}/wakeup.json:/app/config/wakeup.json
+      - ${LSC_CONFIG_DIR:-/volume2/dockerSSD/smart-lamps/config}/settings.json:/app/config/settings.json
