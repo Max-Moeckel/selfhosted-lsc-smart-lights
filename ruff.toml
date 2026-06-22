@@ -1,0 +1,11 @@
+# Ruff config. Default rule set (pyflakes F + pycodestyle E4/E7/E9) plus import
+# sorting and pyupgrade. E501 line length is intentionally not enforced — the code
+# has a few longer lines by design.
+line-length = 100
+target-version = "py312"
+
+[lint]
+extend-select = [
+  "I",    # isort: import ordering
+  "UP",   # pyupgrade: modern syntax
+]

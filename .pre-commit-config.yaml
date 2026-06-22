@@ -1,0 +1,8 @@
+# Install once: pip install pre-commit && pre-commit install
+# Run on all files: pre-commit run --all-files
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.15.13
+    hooks:
+      - id: ruff            # lint, auto-fixing what it can (config in ruff.toml)
+        args: [--fix]

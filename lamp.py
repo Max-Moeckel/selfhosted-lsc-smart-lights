@@ -74,7 +74,7 @@ def _colour_hex_to_rgb(hexval: str) -> str | None:
         return None
     import colorsys
     r, g, b = colorsys.hsv_to_rgb(h / 360, s, v)
-    return "#{:02x}{:02x}{:02x}".format(round(r * 255), round(g * 255), round(b * 255))
+    return f"#{round(r * 255):02x}{round(g * 255):02x}{round(b * 255):02x}"
 
 
 def parse_status(dps: dict | None) -> dict:
@@ -121,7 +121,7 @@ def set_colour(dev: tinytuya.BulbDevice, r: int, g: int, b: int):
 
 def _hsv_hex(h: int, s: int, v: int) -> str:
     """Tuya colour_data_v2 hex: H 0–360, S/V 0–1000."""
-    return "%04x%04x%04x" % (int(h) % 360, max(0, min(1000, int(s))), max(0, min(1000, int(v))))
+    return f"{int(h) % 360:04x}{max(0, min(1000, int(s))):04x}{max(0, min(1000, int(v))):04x}"
 
 
 # Named scenes. White profiles use temp (0=warm…100=cool) + bright (0-100).
@@ -174,7 +174,9 @@ def match_profile(status: dict) -> str | None:
             # In colour mode brightness is the V of DPS 24 (→ max RGB channel), not DPS 22.
             if mode == "colour" and colour:
                 try:
-                    r = int(colour[1:3], 16); g = int(colour[3:5], 16); b = int(colour[5:7], 16)
+                    r = int(colour[1:3], 16)
+                    g = int(colour[3:5], 16)
+                    b = int(colour[5:7], 16)
                 except (ValueError, IndexError):
                     continue
                 cbright = round(max(r, g, b) / 255 * 100)

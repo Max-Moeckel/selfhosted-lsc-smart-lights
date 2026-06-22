@@ -42,7 +42,7 @@ _sync_ts = 0.0
 
 def _hsv_hex(h: int, s: int, v: int) -> str:
     """Tuya colour_data_v2 hex: H 0–360, S/V 0–1000."""
-    return "%04x%04x%04x" % (int(h) % 360, max(0, min(1000, int(s))), max(0, min(1000, int(v))))
+    return f"{int(h) % 360:04x}{max(0, min(1000, int(s))):04x}{max(0, min(1000, int(v))):04x}"
 
 
 def _smooth_step(state: dict) -> tuple[int, int, int]:

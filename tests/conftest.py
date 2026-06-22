@@ -6,7 +6,6 @@ the LAN device is swapped for an in-memory fake, so the tests are deterministic 
 need no hardware.
 """
 
-import os
 import sys
 import threading
 import time
@@ -45,8 +44,9 @@ def base_url():
     import wakeup
     wakeup.start = lambda: None                      # no wake-up scheduler under test
 
-    import app as app_module                          # importing starts the SSE poller
     from werkzeug.serving import make_server
+
+    import app as app_module  # importing starts the SSE poller
     server = make_server("127.0.0.1", 0, app_module.app, threaded=True)
     port = server.socket.getsockname()[1]
     threading.Thread(target=server.serve_forever, daemon=True).start()

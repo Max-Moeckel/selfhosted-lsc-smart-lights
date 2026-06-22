@@ -73,7 +73,7 @@ class FakeBulb:
     def set_colour(self, r, g, b):
         h, s, v = colorsys.rgb_to_hsv(r / 255, g / 255, b / 255)
         self._dps["21"] = "colour"
-        self._dps["24"] = "%04x%04x%04x" % (int(h * 360), int(s * 1000), int(v * 1000))
+        self._dps["24"] = f"{int(h * 360):04x}{int(s * 1000):04x}{int(v * 1000):04x}"
         self._power = True
 
 

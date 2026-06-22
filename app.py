@@ -2,7 +2,7 @@
 
 import threading
 
-from flask import Flask, jsonify, request, render_template, Response, stream_with_context
+from flask import Flask, Response, jsonify, render_template, request, stream_with_context
 
 import lamp
 import party
