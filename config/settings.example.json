@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "working": { "label": "Arbeiten", "temp": 100, "bright": 100 },
+    "reading": { "label": "Lesen", "temp": 65, "bright": 90 },
+    "relax":   { "label": "Entspannen", "temp": 15, "bright": 55 },
+    "night":   { "label": "Nacht", "colour": [255, 0, 0], "temp": 0, "bright": 8 }
+  }
+}

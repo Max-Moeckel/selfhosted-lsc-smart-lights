@@ -2,8 +2,9 @@
 __pycache__/
 *.pyc
 config/devices.json
-# runtime state written by the app; copy from config/wakeup.example.json
+# runtime state written by the app; copy from the matching *.example.json
 config/wakeup.json
+config/settings.json
 # tinytuya wizard output – may contain keys
 tinytuya.json
 snapshot.json

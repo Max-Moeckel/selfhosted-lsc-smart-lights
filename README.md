@@ -103,7 +103,9 @@ smart-light/
 │   ├── devices.example.json  # Vorlage (committet)
 │   ├── devices.json          # Echte Keys (NICHT committet)
 │   ├── wakeup.example.json   # Vorlage (committet)
-│   └── wakeup.json           # Laufzeit-Einstellungen (NICHT committet)
+│   ├── wakeup.json           # Laufzeit-Einstellungen (NICHT committet)
+│   ├── settings.example.json # Vorlage: Szenen-Profile (committet)
+│   └── settings.json         # Profile, per UI editierbar (NICHT committet)
 ├── .gitignore
 └── README.md
 ```
@@ -143,8 +145,9 @@ damit der Wecker nicht doppelt feuert.
 
 ```bash
 cd /volume1/docker/smart-light
-cp config/devices.example.json config/devices.json   # dann echte Local Keys eintragen
-cp config/wakeup.example.json  config/wakeup.json     # Standardwerte, per UI änderbar
+cp config/devices.example.json  config/devices.json    # dann echte Local Keys eintragen
+cp config/wakeup.example.json   config/wakeup.json     # Standardwerte, per UI änderbar
+cp config/settings.example.json config/settings.json   # Szenen-Profile
 ```
 
 3. In **Container Manager** ein Projekt aus der `docker-compose.yml` anlegen — oder per SSH:
@@ -156,9 +159,10 @@ docker compose up -d --build
 4. Aufrufen unter `http://<synology-ip>:8080`
 
 `config/devices.json` (Local Keys) wird **read-only** gemountet, `config/wakeup.json`
-**read-write**. Beide bleiben auf dem Host — durch die `.dockerignore` landet `config/`
-nie im Build-Context oder Image. Die Lampen-IPs müssen aus dem Netz der Synology
-erreichbar sein (gleiches LAN/VLAN).
+und `config/settings.json` (Szenen-Profile, per UI editierbar) **read-write**. Alle
+bleiben auf dem Host — durch die `.dockerignore` landet `config/` nie im Build-Context
+oder Image. Die Lampen-IPs müssen aus dem Netz der Synology erreichbar sein (gleiches
+LAN/VLAN).
 
 ---
 

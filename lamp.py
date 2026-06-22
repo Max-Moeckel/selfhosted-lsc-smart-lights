@@ -7,6 +7,7 @@ from pathlib import Path
 import tinytuya
 
 CONFIG_PATH = Path(os.environ.get("LSC_CONFIG", Path(__file__).parent / "config" / "devices.json"))
+SETTINGS_PATH = Path(os.environ.get("LSC_SETTINGS", Path(__file__).parent / "config" / "settings.json"))
 
 
 def load_config() -> dict:
@@ -126,12 +127,29 @@ def _hsv_hex(h: int, s: int, v: int) -> str:
 # Named scenes. White profiles use temp (0=warm…100=cool) + bright (0-100).
 # A "colour" [r,g,b] makes it a colour scene; temp/bright act as CCT fallback
 # for devices without colour support (the CCT bulb).
-PROFILES = {
+DEFAULT_PROFILES = {
     "working": {"label": "Arbeiten", "temp": 100, "bright": 100},
     "reading": {"label": "Lesen", "temp": 65, "bright": 90},
     "relax":   {"label": "Entspannen", "temp": 15, "bright": 55},
     "night":   {"label": "Nacht", "colour": [255, 0, 0], "temp": 0, "bright": 8},
 }
+
+
+def load_profiles() -> dict:
+    """Scene profiles from config/settings.json if present, else the built-in
+    defaults. The settings file is the future home for UI-edited profiles; any
+    read/parse error falls back to the defaults so a bad file can't break scenes."""
+    try:
+        data = json.loads(SETTINGS_PATH.read_bytes().decode("utf-8", "replace"))
+        profiles = data.get("profiles")
+        if isinstance(profiles, dict) and profiles:
+            return profiles
+    except Exception:
+        pass
+    return dict(DEFAULT_PROFILES)
+
+
+PROFILES = load_profiles()
 
 
 def match_profile(status: dict) -> str | None:

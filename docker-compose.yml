@@ -12,3 +12,5 @@ services:
       - ./config/devices.json:/app/config/devices.json:ro
       # Wake-up settings: writable so the web UI can persist them.
       - ./config/wakeup.json:/app/config/wakeup.json
+      # Scene profiles: writable so UI-edited profiles can be persisted (future).
+      - ./config/settings.json:/app/config/settings.json
