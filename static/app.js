@@ -145,7 +145,13 @@ function renderCards() {
   names.forEach((n, i) => {
     const html = card(n, statusByName[n] || pendingStatus());
     if (html === lastCardHtml[n]) return;            // unchanged → don't touch the DOM
-    if (current[i].contains(document.activeElement)) return;  // user is interacting → defer
+    // Defer only when the user is mid-edit in a value control (dragging a slider,
+    // typing a field) — re-rendering would reset it. A focused *button* must NOT
+    // block the update: clicking it focuses it, so blocking would suppress the very
+    // optimistic highlight the click is meant to show.
+    const ae = document.activeElement;
+    if (ae && current[i].contains(ae)
+        && ['INPUT', 'SELECT', 'TEXTAREA'].includes(ae.tagName)) return;
     current[i].outerHTML = html;
     lastCardHtml[n] = html;
   });
