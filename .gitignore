@@ -6,6 +6,5 @@ config/devices.json
 tinytuya.json
 snapshot.json
 devices.json
-.playwright-mcp/page-2026-06-22T17-45-01-371Z.yml
-.playwright-mcp/page-2026-06-22T17-45-52-003Z.yml
+.playwright-mcp/
 *.png
