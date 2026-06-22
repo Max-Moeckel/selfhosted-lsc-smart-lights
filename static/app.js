@@ -162,8 +162,10 @@ function renderPending(names) {
   renderCards();
 }
 
-async function refresh() {
-  const [data, party] = await Promise.all([api('/api/status'), api('/api/party')]);
+// Apply a status snapshot pushed by the server over SSE (no network here).
+function applySnapshot(snap) {
+  const data = snap.status || {};
+  const party = snap.party || {active: false, mode: null, bpm: 0};
   partyActive = party.active;
   partyMode = party.mode;
   if (!partyActive || partyMode !== 'music') { stopMic(); micOn = false; }
@@ -176,12 +178,21 @@ async function refresh() {
   renderCards();
 }
 
+// Live status via Server-Sent Events: the server polls the lamps centrally and
+// pushes every change here, so the UI never polls. EventSource auto-reconnects
+// if the stream drops, and commands call status.poke() server-side so a change
+// reconciles within one LAN round-trip rather than waiting for the next sweep.
+function connectStream() {
+  const es = new EventSource('/api/stream');
+  es.onmessage = (e) => applySnapshot(JSON.parse(e.data));
+}
+
 async function power(name, on) {
   if (statusByName[name]) statusByName[name].on = on;  // optimistic
   renderCards();
   await api(`/api/${name}/power`, {method:'POST',
     headers:{'Content-Type':'application/json'}, body:JSON.stringify({on})});
-  refresh();
+  // server poke() → the next SSE push reconciles; no client fetch needed
 }
 
 async function setv(name, kind, val) {
@@ -212,7 +223,7 @@ async function profile(name, key) {
   }
   await api(`/api/${name}/profile`, {method:'POST',
     headers:{'Content-Type':'application/json'}, body:JSON.stringify({key})});
-  refresh();                       // reconcile with real state
+  // server poke() → the next SSE push reconciles with real state
 }
 
 const DAYNAMES = ['Mo','Di','Mi','Do','Fr','Sa','So'];
@@ -287,7 +298,7 @@ async function toggleParty(name, mode) {
     });
   }
   renderCards();
-  refresh();
+  // server poke() → the next SSE push reconciles
 }
 
 async function setBpm(name) {
@@ -520,6 +531,5 @@ function stopMic() {
   PROFILES = profiles;
   renderPending(names);            // show clickable lamp cards immediately
   loadWakeup(names);               // populate the wake-up panel in parallel
-  refresh();                       // fill in live status when it arrives
-  setInterval(refresh, 10000);
+  connectStream();                 // live status pushed over SSE (no polling)
 })();

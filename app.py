@@ -2,14 +2,16 @@
 
 import threading
 
-from flask import Flask, jsonify, request, render_template
+from flask import Flask, jsonify, request, render_template, Response, stream_with_context
 
 import lamp
 import party
+import status
 import wakeup
 
 app = Flask(__name__)
 wakeup.start()
+status.start()
 
 
 def _device(name):
@@ -37,7 +39,8 @@ def devices():
 
 
 @app.get("/api/status")
-def status():
+def status_once():
+    # one-shot snapshot (used by tools/debugging); the UI uses /api/stream instead
     cfg = lamp.load_config()
     out = {}
     for name, dcfg in cfg.items():
@@ -48,6 +51,17 @@ def status():
     return jsonify(out)
 
 
+@app.get("/api/stream")
+def stream():
+    # Server-Sent Events: live status pushed from the central poller, so the UI
+    # never polls. Headers disable buffering so events flush immediately.
+    return Response(
+        stream_with_context(status.event_stream()),
+        mimetype="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
 @app.post("/api/<name>/power")
 def power(name):
     _, dev = _device(name)
@@ -56,6 +70,7 @@ def power(name):
     wakeup.cancel()
     try:
         lamp.set_power(dev, bool(request.json.get("on")))
+        status.poke()
         return jsonify({"ok": True})
     except Exception as e:
         return jsonify({"error": str(e)}), 502
@@ -70,6 +85,7 @@ def bright(name):
     wakeup.cancel()
     try:
         lamp.set_bright(dev, val)
+        status.poke()
         return jsonify({"ok": True})
     except Exception as e:
         return jsonify({"error": str(e)}), 502
@@ -84,6 +100,7 @@ def temp(name):
     wakeup.cancel()
     try:
         lamp.set_temp(dev, val)
+        status.poke()
         return jsonify({"ok": True})
     except Exception as e:
         return jsonify({"error": str(e)}), 502
@@ -101,6 +118,7 @@ def colour(name):
     try:
         r, g, b = (int(hexval[i:i + 2], 16) for i in (0, 2, 4))
         lamp.set_colour(dev, r, g, b)
+        status.poke()
         return jsonify({"ok": True})
     except Exception as e:
         return jsonify({"error": str(e)}), 502
@@ -143,6 +161,7 @@ def party_set():
         party.start(device, body.get("mode", "smooth"), int(body.get("bpm", 0) or 0))
     else:
         party.stop()
+    status.poke()
     return jsonify({"active": party.is_active(), "mode": party.active_mode(),
                     "bpm": party.current_bpm()})
 
@@ -167,6 +186,7 @@ def profile(name):
     wakeup.cancel()
     try:
         lamp.apply_profile(dev, key)
+        status.poke()
         return jsonify({"ok": True})
     except Exception as e:
         return jsonify({"error": str(e)}), 502
