@@ -44,7 +44,7 @@ function card(name, s) {
   const dim = off ? 'opacity-50 pe-none' : '';
   const psel = (on) => on ? 'btn-primary' : 'btn-outline-light';
   return `
-  <div class="col-12 col-md-6">
+  <div class="col-12 col-md-6" data-name="${name}">
   <div class="card bg-dark border-secondary h-100">
     <div class="card-body">
       <div class="d-flex justify-content-between align-items-center mb-2">
@@ -122,10 +122,33 @@ function card(name, s) {
 }
 
 // Render from cached status (no network) so optimistic UI changes show instantly.
+// A card's DOM is only rebuilt when its rendered HTML actually changes, so the 10 s
+// status poll no longer wipes and re-creates every button on each tick — that churn
+// detached buttons mid-click and made them "not react". A card the user is currently
+// interacting with is also left alone, so a refresh can't yank a focused control.
+let lastCardHtml = {};  // device name -> last HTML string we rendered for that card
+
 function renderCards() {
   const names = deviceNames.length ? deviceNames : Object.keys(statusByName);
-  document.getElementById('lamps').innerHTML =
-    names.map(n => card(n, statusByName[n] || pendingStatus())).join('');
+  const root = document.getElementById('lamps');
+  const current = [...root.children];
+  const sameStructure = current.length === names.length
+    && names.every((n, i) => current[i].dataset.name === n);
+  if (!sameStructure) {                 // first paint or the device list changed: full build
+    root.innerHTML = names.map(n => {
+      const html = card(n, statusByName[n] || pendingStatus());
+      lastCardHtml[n] = html;
+      return html;
+    }).join('');
+    return;
+  }
+  names.forEach((n, i) => {
+    const html = card(n, statusByName[n] || pendingStatus());
+    if (html === lastCardHtml[n]) return;            // unchanged → don't touch the DOM
+    if (current[i].contains(document.activeElement)) return;  // user is interacting → defer
+    current[i].outerHTML = html;
+    lastCardHtml[n] = html;
+  });
 }
 
 function renderPending(names) {
