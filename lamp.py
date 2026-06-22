@@ -34,8 +34,18 @@ def make_device(cfg: dict) -> tinytuya.BulbDevice:
 
 
 def get_dps(dev: tinytuya.BulbDevice) -> dict | None:
-    """Raw DPS dict, or None if the device is offline/unreachable."""
+    """Raw DPS dict, or None if the device is offline/unreachable.
+
+    The CCT ceiling light's plain status() reply is a stale cache that omits the
+    power DP 20, so on/off couldn't be told apart (the light DPs 21-24 stay present
+    even when off) and the UI showed "aus" while the lamp was on. updatedps([20])
+    makes the device push a fresh full snapshot including DP 20, which status() reads.
+    """
     try:
+        try:
+            dev.updatedps([20])  # best-effort: force a fresh power-state push
+        except Exception:
+            pass
         data = dev.status()
         if "Error" in data:
             return None
@@ -96,8 +106,11 @@ def set_bright(dev: tinytuya.BulbDevice, pct: int):
 
 
 def set_temp(dev: tinytuya.BulbDevice, pct: int):
-    # ensure white mode so colour temp is visible, then set it
-    dev.set_mode("white")
+    # ensure white mode so colour temp is visible, then set it. Set DPS 21 directly
+    # instead of dev.set_mode("white"): set_mode() branches on detected bulb
+    # capabilities, which need a prior status() call we don't make per request, so it
+    # raises "Bulb not configured, cannot get device capabilities" on this device.
+    dev.set_value(21, "white")
     dev.set_value(23, round(pct * 10))
 
 
@@ -168,6 +181,6 @@ def apply_profile(dev: tinytuya.BulbDevice, key: str):
             return
         except Exception:
             pass  # CCT-only device → fall through to the white fallback
-    dev.set_mode("white")
+    dev.set_value(21, "white")  # direct DPS, not set_mode(): see set_temp() note
     dev.set_value(23, round(p["temp"] * 10))
     dev.set_value(22, max(10, round(p["bright"] / 100 * 990 + 10)))
