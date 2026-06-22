@@ -101,7 +101,9 @@ smart-light/
 ├── setup_devices.py          # Config-Generator nach Wizard
 ├── config/
 │   ├── devices.example.json  # Vorlage (committet)
-│   └── devices.json          # Echte Keys (NICHT committet)
+│   ├── devices.json          # Echte Keys (NICHT committet)
+│   ├── wakeup.example.json   # Vorlage (committet)
+│   └── wakeup.json           # Laufzeit-Einstellungen (NICHT committet)
 ├── .gitignore
 └── README.md
 ```
@@ -126,23 +128,37 @@ Oben in der Weboberfläche: zu einer eingestellten **Startzeit** fährt die gew�
 über **10–60 Minuten** Helligkeit (1 → 100 %) und Farbtemperatur (warm → neutral) hoch.
 Wochentage wählbar, „2-min-Test" für eine schnelle Vorschau.
 
-Die Einstellungen liegen in `config/wakeup.json` (kommitierbar, keine Secrets) und werden
-über die Oberfläche gespeichert. Der Scheduler läuft als Hintergrund-Thread im Container —
-deshalb startet gunicorn bewusst mit **einem** Worker, damit der Wecker nicht doppelt feuert.
+Die Einstellungen liegen in `config/wakeup.json` und werden über die Oberfläche
+gespeichert (deshalb read-write gemountet). Die Datei ist Laufzeit-Status und **nicht
+committet** — vor dem ersten Start aus der Vorlage anlegen:
+`cp config/wakeup.example.json config/wakeup.json`. Der Scheduler läuft als
+Hintergrund-Thread im Container — deshalb startet gunicorn bewusst mit **einem** Worker,
+damit der Wecker nicht doppelt feuert.
 
 ### Auf Synology deployen
 
-1. Projektordner auf die NAS kopieren (z.B. `/volume1/docker/smart-light/`), inkl. `config/devices.json`
-2. In **Container Manager** ein Projekt aus der `docker-compose.yml` anlegen — oder per SSH:
+1. Projektordner auf die NAS kopieren (z.B. `/volume1/docker/smart-light/`).
+2. Config-Dateien aus den Vorlagen anlegen (beide werden als Volume gemountet und
+   müssen auf dem Host existieren — sonst legt Docker an ihrer Stelle ein Verzeichnis an):
 
 ```bash
 cd /volume1/docker/smart-light
+cp config/devices.example.json config/devices.json   # dann echte Local Keys eintragen
+cp config/wakeup.example.json  config/wakeup.json     # Standardwerte, per UI änderbar
+```
+
+3. In **Container Manager** ein Projekt aus der `docker-compose.yml` anlegen — oder per SSH:
+
+```bash
 docker compose up -d --build
 ```
 
-3. Aufrufen unter `http://<synology-ip>:8080`
+4. Aufrufen unter `http://<synology-ip>:8080`
 
-Die `config/devices.json` mit den Local Keys wird **read-only als Volume gemountet** und landet nie im Image. Die Lampen-IPs müssen aus dem Netz der Synology erreichbar sein (gleiches LAN/VLAN).
+`config/devices.json` (Local Keys) wird **read-only** gemountet, `config/wakeup.json`
+**read-write**. Beide bleiben auf dem Host — durch die `.dockerignore` landet `config/`
+nie im Build-Context oder Image. Die Lampen-IPs müssen aus dem Netz der Synology
+erreichbar sein (gleiches LAN/VLAN).
 
 ---
 

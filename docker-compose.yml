@@ -7,7 +7,8 @@ services:
     ports:
       - "8080:8080"
     volumes:
-      # Runtime config (device local keys + wake-up settings) lives on the host and
-      # is bind-mounted read-write — never baked into the image. The web UI persists
-      # wake-up settings back into this directory.
-      - ./config:/app/config
+      # Device local keys: read-only, and never baked into the image (kept out of the
+      # build context by .dockerignore) — only ever mounted from the host.
+      - ./config/devices.json:/app/config/devices.json:ro
+      # Wake-up settings: writable so the web UI can persist them.
+      - ./config/wakeup.json:/app/config/wakeup.json
