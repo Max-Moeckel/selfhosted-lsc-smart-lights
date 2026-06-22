@@ -2,8 +2,6 @@
 # keys are never sent to the daemon or baked into the image. config/ is provided at
 # runtime via a bind mount (see docker-compose.yml).
 config/
-.env
-.env.example
 tinytuya.json
 snapshot.json
 

@@ -172,17 +172,13 @@ LAN/VLAN).
 dass die App auf `:8080` antwortet.
 
 `docker-compose-prod.yml` mountet die Config aus einem **absoluten Host-Pfad**
-`${LSC_CONFIG_DIR:-/volume2/dockerSSD/smart-lamps/config}` (nötig, weil bei
-Socket-gemountetem Docker der Host den Mount-Pfad auflöst, nicht der Workspace). Die
-drei `config/*.json` müssen dort auf dem Host liegen.
+`${LSC_CONFIG_DIR}` (nötig, weil bei Socket-gemountetem Docker der Host den Mount-Pfad
+auflöst, nicht der Workspace). Die drei `config/*.json` müssen dort auf dem Host liegen.
 
-**Pfad-Override via `.env` ist manuell** — der Workflow legt die Datei **nicht** an.
-`docker compose` lädt eine `.env` automatisch aus dem Projektverzeichnis; ohne `.env`
-gilt der Default oben. Zum Überschreiben:
-
-```bash
-cp .env.example .env    # dann LSC_CONFIG_DIR anpassen
-```
+Der Pfad kommt aus der **Gitea-Actions-Variable `LSC_CONFIG_DIR`** (Repo → Settings →
+Actions → Variables), z. B. `/volume2/dockerSSD/smart-lamps/config`. Der Workflow reicht
+sie als Env an `docker compose` weiter. Ist sie nicht gesetzt, bricht Compose mit einer
+klaren Meldung ab.
 
 ---
 

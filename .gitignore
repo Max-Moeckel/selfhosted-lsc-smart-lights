@@ -11,5 +11,3 @@ snapshot.json
 devices.json
 .playwright-mcp/
 *.png
-# local env for docker compose (copy from .env.example)
-.env
