@@ -10,6 +10,14 @@ services:
         limits:
           cpus: "1.0"
           memory: 500M
+    # Mark the container healthy only while the app actually serves (slim image has
+    # no curl/wget, so use Python's urllib — urlopen raises on a bad status/refusal).
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
     ports:
       - "8080:8080"
     volumes:
