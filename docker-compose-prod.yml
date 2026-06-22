@@ -12,6 +12,10 @@ services:
     image: lsc-web:latest
     container_name: lsc-web
     restart: unless-stopped
+    # Wake-up scheduler matches datetime.now() against the configured HH:MM, so the
+    # container must run in local time, not UTC (tzdata is baked into the image).
+    environment:
+      TZ: Europe/Berlin
     # Cap resources without a --cpus/CFS quota (the Synology kernel lacks CFS
     # bandwidth control, so NanoCPUs is rejected). cpu_shares is a relative weight
     # (default 1024); 256 = 1/4, i.e. ~1 of the 4 cores under contention. mem_limit
