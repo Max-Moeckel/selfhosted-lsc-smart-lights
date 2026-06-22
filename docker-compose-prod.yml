@@ -13,7 +13,7 @@ services:
     container_name: lsc-web
     restart: unless-stopped
     ports:
-      - "8080:8080"
+      - "8089:8080"
     volumes:
       - ${LSC_CONFIG_DIR:?set the LSC_CONFIG_DIR Gitea Actions variable}/devices.json:/app/config/devices.json:ro
       - ${LSC_CONFIG_DIR:?set the LSC_CONFIG_DIR Gitea Actions variable}/wakeup.json:/app/config/wakeup.json
