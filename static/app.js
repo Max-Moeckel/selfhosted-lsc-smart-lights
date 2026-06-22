@@ -36,11 +36,18 @@ function card(name, s) {
   const pending = !!s.pending;
   const stateCls = off ? 'text-bg-danger' : (s.on ? 'text-bg-success' : 'text-bg-secondary');
   const stateTxt = off ? 'offline' : (s.on ? 'an' : 'aus');
+  // The badge is the power toggle: it shows the state and, when online, clicking it
+  // flips power. Offline/pending stay non-interactive. This replaces the separate
+  // An/Aus button, which used to contradict the badge (badge "an" next to button "Aus").
   const badge = pending
     ? `<span class="badge text-bg-secondary">
          <span class="spinner-border spinner-border-sm" style="width:.8rem;height:.8rem"></span>
        </span>`
-    : `<span class="badge ${stateCls}">${stateTxt}</span>`;
+    : off
+      ? `<span class="badge ${stateCls}">${stateTxt}</span>`
+      : `<button type="button" class="badge border-0 ${stateCls}" style="cursor:pointer"
+           title="Klicken zum ${s.on ? 'Ausschalten' : 'Einschalten'}"
+           onclick="power('${name}', ${s.on ? 'false' : 'true'})">${stateTxt}</button>`;
   const dim = off ? 'opacity-50 pe-none' : '';
   const psel = (on) => on ? 'btn-primary' : 'btn-outline-light';
   return `
@@ -52,10 +59,6 @@ function card(name, s) {
         ${badge}
       </div>
       <div class="${dim}">
-        <button class="btn btn-sm ${s.on ? 'btn-secondary' : 'btn-success'} mb-2"
-          style="min-width:64px" onclick="power('${name}', ${s.on ? 'false':'true'})">
-          ${s.on ? 'Aus' : 'An'}
-        </button>
         <div class="d-flex flex-wrap gap-1 mb-3">
           ${Object.entries(PROFILES).map(([k, lbl]) =>
             `<button class="btn btn-sm ${psel(!partyActive && selected[name]===k)}"

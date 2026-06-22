@@ -40,13 +40,14 @@ def test_devices_render(page, base_url, fake):
 
 def test_power_toggle_updates_badge_and_device(page, base_url, fake):
     open_ui(page, base_url)
-    power = card(page, "ceiling").locator("button").first
+    # the badge itself is the power toggle
+    expect(badge(page, "ceiling")).to_have_text("aus")
 
-    power.click()                                   # "An"
+    badge(page, "ceiling").click()
     expect(badge(page, "ceiling")).to_have_text("an")
     assert fake.dev("ceiling")._power is True
 
-    power.click()                                   # now "Aus"
+    badge(page, "ceiling").click()
     expect(badge(page, "ceiling")).to_have_text("aus")
     assert fake.dev("ceiling")._power is False
 
