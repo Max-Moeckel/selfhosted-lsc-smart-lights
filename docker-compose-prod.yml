@@ -31,7 +31,7 @@ services:
       retries: 3
       start_period: 15s
     ports:
-      - "8089:8080"
+      - "8090:8080"
     volumes:
       - ${LSC_CONFIG_DIR:?set the LSC_CONFIG_DIR Gitea Actions variable}/devices.json:/app/config/devices.json:ro
       - ${LSC_CONFIG_DIR:?set the LSC_CONFIG_DIR Gitea Actions variable}/wakeup.json:/app/config/wakeup.json
