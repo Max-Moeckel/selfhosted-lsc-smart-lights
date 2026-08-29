@@ -11,3 +11,9 @@ snapshot.json
 devices.json
 .playwright-mcp/
 *.png
+# lokale Notizen / Scratch – nicht Teil des Projekts
+NOTES.local.md
+ideen.md
+# Claude-Code-Settings pro Maschine (bisher nur über die globale ~/.config/git/ignore
+# abgedeckt, die bei einem Clone nicht mitwandert)
+.claude/settings.local.json
